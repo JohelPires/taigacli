@@ -267,6 +267,30 @@ def cmd_set(api, ctx, tokens: list, status_opt: str | None, dry_run: bool):
     print()
 
 
+def cmd_get_md(api, ctx, resource: str, item_id: int, md_path: str, force: bool):
+    import sys as _sys
+
+    from taigacli import export
+    from taigacli.theme import g
+
+    path = RESOURCES.get(resource, resource)
+    if path in REF_RESOURCES:
+        item = api.by_ref(path, item_id)
+    else:
+        item = api.get(f"{path}/{item_id}")
+    if not isinstance(item, dict):
+        raise CliError(f"Not found: {LABELS.get(path, path)} {item_id}")
+    extras = export.collect(api, resource, item)
+    content = export.render_markdown(item, resource, extras)
+    written = export.write_markdown(
+        md_path,
+        content,
+        force=force,
+        default_name=export.auto_name(resource, item),
+    )
+    print(paint(g("dot"), "ready") + " " + paint(f"saved {written}", "muted"), file=_sys.stderr)
+
+
 def new_status_name(status: dict) -> str:
     return str(status.get("name", ""))
 

@@ -105,18 +105,27 @@ def help_cmd(cmd_json, cmd_plain):
 
 
 def _make_resource_command(name: str):
-    def _resource_cmd(ctx, ref, limit, filters, cmd_json, cmd_plain):
+    def _resource_cmd(ctx, ref, limit, filters, md_path, force, cmd_json, cmd_plain):
         _ui(ctx)
         resource = RESOURCE_CANONICAL[name]
         api = _api()
+        if md_path and resource == "memberships":
+            raise CliError("members have no ticket to export - drop --md")
         if ref is not None:
-            commands.cmd_get(api, ctx, resource, ref)
+            if md_path:
+                commands.cmd_get_md(api, ctx, resource, ref, md_path, force)
+            else:
+                commands.cmd_get(api, ctx, resource, ref)
         else:
+            if md_path:
+                raise CliError("Give a REF: --md exports one item")
             commands.cmd_list(api, ctx, resource, limit, list(filters))
 
     # apply decorators innermost (closest to fn) first, click.command outermost
     fn = click.pass_context(_resource_cmd)
     fn = click.argument("ref", required=False, type=int, metavar="REF")(fn)
+    fn = click.option("--force", "-f", "force", is_flag=True, default=False, help="overwrite an existing file without asking")(fn)
+    fn = click.option("--md", "md_path", type=click.Path(), default=None, help="write the item as markdown to PATH")(fn)
     fn = click.option("--filter", "filters", multiple=True, help="repeatable; key=value")(fn)
     fn = click.option("--limit", type=int, default=None, help="cap the number of listed results")(fn)
     fn = click.option("--plain", "cmd_plain", is_flag=True, help="no color, ASCII only")(fn)

@@ -8,7 +8,7 @@ import httpx
 
 from taigacli.config import config, load_env, secure, token_file
 from taigacli.errors import CliError
-from taigacli.resources import STATUS_KINDS
+from taigacli.resources import HISTORY_KINDS, STATUS_KINDS
 
 _token_cache: dict[str, str] = {}
 
@@ -125,5 +125,32 @@ class Api:
             raise CliError(f"No statuses for resource '{resource}' - choose from: userstories, tasks, issues")
         data = self.get(kinds, params={"project": project_id_val}) or []
         return sorted(data, key=lambda s: (s.get("order") or 0, s.get("id") or 0))
+
+    # best-effort reads for the markdown export: a failure omits the section
+    def history(self, resource: str, item_id: int):
+        kind = HISTORY_KINDS.get(resource)
+        if not kind or not item_id:
+            return None
+        try:
+            return self.get(f"history/{kind}/{item_id}", soft=True)
+        except CliError:
+            return None
+
+    def attachments(self, resource: str, item_id: int):
+        if not item_id:
+            return None
+        try:
+            return self.get(f"{resource}/attachments", params={"object_id": item_id}, soft=True)
+        except CliError:
+            return None
+
+    def child_tasks(self, story_id: int):
+        if not story_id:
+            return None
+        try:
+            return self.get("tasks", params={"user_story": story_id}, soft=True)
+        except CliError:
+            return None
+
 
 __all__ = ["Api", "get_token", "load_env", "request", "config"]

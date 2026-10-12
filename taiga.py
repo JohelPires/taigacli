@@ -587,9 +587,16 @@ def by_ref(cfg, token: str, path: str, ref: int, soft: bool = False) -> dict:
     return item
 
 
+_PROJECT_CACHE: dict[tuple, dict] = {}
+
+
 def project(cfg: dict, token: str) -> dict:
+    cache_key = (cfg["api_url"], cfg["slug"], token)
+    if cache_key in _PROJECT_CACHE:
+        return _PROJECT_CACHE[cache_key]
     proj = http(cfg, "GET", "projects/by_slug", token, params={"slug": cfg["slug"]})
     if isinstance(proj, dict) and proj.get("id"):
+        _PROJECT_CACHE[cache_key] = proj
         return proj
     fail(f"Could not resolve project by slug '{cfg['slug']}': {proj}")
 
@@ -638,6 +645,28 @@ SET_ALIASES = {
     "issue": "issues",
     "issues": "issues",
 }
+
+# resource-as-command: canonical command name -> (resource key, aliases)
+RESOURCE_SPECS = {
+    "stories": ("userstories", ("story", "userstories", "userstory")),
+    "tasks": ("tasks", ("task",)),
+    "issues": ("issues", ("issue",)),
+    "epics": ("epics", ("epic",)),
+    "milestones": ("milestones", ("milestone",)),
+    "members": ("memberships", ("memberships", "membership")),
+    "wiki": ("wiki", ()),
+    "timeline": ("timeline", ()),
+}
+
+# any spelling a user may type (command or alias) -> canonical resource key
+RESOURCE_CANONICAL = {}
+for _cmd, (_res, _aliases) in RESOURCE_SPECS.items():
+    RESOURCE_CANONICAL[_cmd] = _res
+    for _alias in _aliases:
+        RESOURCE_CANONICAL[_alias] = _res
+
+# resources resolved by ref (as opposed to numeric API id)
+REF_RESOURCES = ("userstories", "tasks", "issues", "epics")
 
 
 def load_statuses(cfg, token: str, project_id_val: int, resource: str) -> list[dict]:
@@ -874,7 +903,7 @@ def cmd_list(cfg: dict, token: str, args):
 
 def cmd_get(cfg: dict, token: str, args):
     path = RESOURCES.get(args.resource, args.resource)
-    if path in ("userstories", "tasks", "issues"):
+    if path in REF_RESOURCES:
         item = by_ref(cfg, token, path, args.id)
         if args.json:
             print(json.dumps(item, indent=2))
@@ -935,9 +964,8 @@ def cmd_help() -> None:
 
     commands = [
         ("mine", "open user stories, tasks and issues assigned to you"),
+        ("<resource> [ref]", "list a resource; given a ref, show that one item"),
         ("set <ref> --<status>", "change a status; bare set <ref> shows the options"),
-        ("list <resource>", f"filterable list of {len(resources.split())} resources"),
-        ("get <resource> <id>", "one item in full detail"),
         ("whoami", "the signed-in account"),
         ("project", "the resolved project"),
         ("help", "this page"),
@@ -952,9 +980,11 @@ def cmd_help() -> None:
         print("\n".join(GUTTER + " " * (name_w + 2) + paint(ln, "muted") for ln in wrapped[1:]))
     section("resources")
     print(GUTTER + paint(resources, "muted"))
+    print(GUTTER + paint("each one is a command too: taiga.py tasks lists, taiga.py task 1343 shows one", "muted"))
+    print(GUTTER + paint("singular aliases work: story task issue epic milestone", "muted"))
     flags = [
-        ("--filter k=v", "repeatable; keys: project, status, milestone, assigned_to, page_size"),
-        ("--limit N", "cap the number of results"),
+        ("--filter k=v", "repeatable, listings only; keys: project, status, milestone, assigned_to, page_size"),
+        ("--limit N", "cap the number of listed results"),
         ("--json", "raw JSON payload on stdout"),
         ("--plain", "no color, ASCII only; also honors NO_COLOR and non-tty output"),
         ("set: --dry-run", "preview the change"),
@@ -971,9 +1001,9 @@ def cmd_help() -> None:
         "taiga.py mine",
         "taiga.py set 1344 --in-review",
         "taiga.py set 1344 --done --dry-run",
-        "taiga.py list tasks --filter assigned_to=115",
-        "taiga.py get userstories 1344",
-        "taiga.py get issues 12 --json",
+        "taiga.py tasks --filter assigned_to=115",
+        "taiga.py story 1344",
+        "taiga.py issue 12 --json",
     ]:
         print(GUTTER + paint("$ ", "muted") + paint(ex, "ink"))
     print()
@@ -1017,25 +1047,30 @@ def main() -> None:
         else:
             filtered.append(token)
 
-    shared = argparse.ArgumentParser(add_help=False)
+    shared = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
     shared.add_argument("--json", action="store_true", help="raw JSON output")
     shared.add_argument("--plain", action="store_true", help="no color, ASCII only")
-    parser = argparse.ArgumentParser(description="Taiga board client")
+    parser = argparse.ArgumentParser(description="Taiga board client", allow_abbrev=False)
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("whoami", parents=[shared])
-    sub.add_parser("project", parents=[shared])
+    resource_help = {
+        "stories": "list user stories; add a ref to show one",
+        "tasks": "list tasks; add a ref to show one",
+        "issues": "list issues; add a ref to show one",
+        "epics": "list epics; add a ref to show one",
+        "milestones": "list milestones; add an id to show one",
+        "members": "list project members; add an id to show one",
+        "wiki": "list wiki pages; add an id to show one",
+        "timeline": "recent project activity (list only)",
+    }
+    for cmd_name, (res_key, aliases) in RESOURCE_SPECS.items():
+        p_res = sub.add_parser(cmd_name, aliases=list(aliases), parents=[shared], allow_abbrev=False, help=resource_help[cmd_name])
+        if cmd_name != "timeline":
+            p_res.add_argument("ref", nargs="?", type=int, default=None, metavar="REF")
+        p_res.add_argument("--limit", type=int, default=None)
+        p_res.add_argument("--filter", action="append", default=[])
 
-    p_list = sub.add_parser("list", parents=[shared], help="list a resource: epics stories tasks issues milestones members wiki timeline")
-    p_list.add_argument("resource")
-    p_list.add_argument("--limit", type=int, default=None)
-    p_list.add_argument("--filter", action="append", default=[])
-
-    p_get = sub.add_parser("get", parents=[shared], help="fetch single object")
-    p_get.add_argument("resource")
-    p_get.add_argument("id", type=int)
-
-    p_mine = sub.add_parser("mine", parents=[shared], help="list open userstories/tasks/issues assigned to me")
+    p_mine = sub.add_parser("mine", parents=[shared], allow_abbrev=False, help="list open userstories/tasks/issues assigned to me")
     p_mine.add_argument("--limit", type=int, default=None)
 
     p_set = sub.add_parser("set", parents=[shared], allow_abbrev=False, help="change an item's status (e.g. set 1344 --in-review)")
@@ -1043,7 +1078,9 @@ def main() -> None:
     p_set.add_argument("--dry-run", action="store_true", help="show the change without saving")
     p_set.add_argument("--status", help="target status by name, slug or id (instead of a --flag)")
 
-    sub.add_parser("help", parents=[shared], help="show available commands and usage")
+    sub.add_parser("whoami", parents=[shared], allow_abbrev=False, help="the signed-in account")
+    sub.add_parser("project", parents=[shared], allow_abbrev=False, help="the resolved project")
+    sub.add_parser("help", parents=[shared], allow_abbrev=False, help="show available commands and usage")
 
     args, extras = parser.parse_known_args(filtered)
     args.json = args.json or global_json
@@ -1060,16 +1097,22 @@ def main() -> None:
 
     cfg = config()
     token = get_token(cfg)
-    if args.command == "mine":
+    if args.command in RESOURCE_CANONICAL:
+        resource = RESOURCE_CANONICAL[args.command]
+        if resource == "timeline" and getattr(args, "ref", None) is not None:
+            parser.error("timeline has no individual items - drop the ref")
+        args.resource = resource
+        if getattr(args, "ref", None) is not None:
+            args.id = args.ref
+            cmd_get(cfg, token, args)
+        else:
+            cmd_list(cfg, token, args)
+    elif args.command == "mine":
         cmd_mine(cfg, token, args)
     elif args.command == "whoami":
         cmd_whoami(cfg, token, args)
     elif args.command == "project":
         cmd_project(cfg, token, args)
-    elif args.command == "list":
-        cmd_list(cfg, token, args)
-    elif args.command == "get":
-        cmd_get(cfg, token, args)
     elif args.command == "set":
         cmd_set(cfg, token, args, extras)
 

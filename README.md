@@ -41,7 +41,7 @@ taiga <command> [options]
 taiga mine                                 # open user stories / tasks / issues assigned to you
 taiga tasks                                # list tasks
 taiga task 1343                            # show one task by ref
-taiga story 1343 --md ./1343.md            # export a ticket as markdown to a file
+taiga story 1343 --md ./stories            # export a ticket as markdown into a folder (filename derived from the title)
 taiga set 1344 --in-review                 # change a status
 taiga set 1344 --done --dry-run            # preview the change without saving
 taiga tasks --filter assigned_to=115       # filter listings (repeatable)
@@ -69,13 +69,13 @@ taiga issue 12 --json                      # raw JSON payload
 - `--plain` — no color, ASCII only
 - `<resource>`: `--limit N` — cap listing results; `--filter k=v` — repeatable (keys: `project`, `status`, `milestone`, `assigned_to`, `page_size`)
 - `set`: `--dry-run` — preview the change; `--status "In Review"` — target a status by name, slug or id instead of a flag
-- `<resource> <ref>`: `--md PATH` — write the full ticket as markdown to PATH; `--force` — overwrite an existing file without asking
+- `<resource> <ref>`: `--md DIR` — write the full ticket as markdown into DIR, named from the ticket title; `--force` — overwrite an existing file without asking
 
 Re-setting the current status is a no-op. Refs are per-type: if a ref exists as more than one of user story / task / issue, `set` prints the candidates and asks for a resource prefix (e.g. `set story <ref>`).
 
 ## Markdown export
 
-`--md PATH` saves a full ticket as a Markdown file (one `GET` and a few best-effort calls; a failing section is omitted, never fatal):
+`--md DIR` saves a full ticket as a Markdown file (one `GET` and a few best-effort calls; a failing section is omitted, never fatal):
 
 - YAML-ish front matter: type, ref, status, assignee, milestone, tags, created, modified, id
 - `# Subject`, the description (HTML converted to Markdown)
@@ -84,11 +84,12 @@ Re-setting the current status is a no-op. Refs are per-type: if a ref exists as 
 - Comments from the item history
 - Attachment index (name + size; files are not downloaded)
 
-Path semantics: missing parent directories are created; if `PATH` is an existing directory a file named `<type>-<ref>-<subject-slug>.md` is written inside it; if the target file exists you are asked to confirm overwrite (or pass `--force`; from a non-interactive shell a prompt is refused). `--md` without a ref is an error.
+Path semantics: `DIR` is folder-first — only a path with a file extension (e.g. `.md`) is taken as an explicit file name. The folder is created if missing and the file inside is named `<type>-<ref>-<subject-slug>.md` from the ticket title. If the target file exists you are asked to confirm overwrite (or pass `--force`; from a non-interactive shell a prompt is refused). `--md` without a ref is an error.
 
 ```sh
-taiga story 1343 --md ./stories/1343.md
-taiga issue 12 --md ~/notes -f            # -f == --force
+taiga story 1343 --md ./stories            # ./stories/story-1343-<title-slug>.md
+taiga story 1343 --md ./stories/1343.md    # explicit file name still works
+taiga issue 12 --md ~/notes -f             # -f == --force
 ```
 
 ## Output styling

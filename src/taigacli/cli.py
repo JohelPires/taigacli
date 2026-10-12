@@ -125,7 +125,7 @@ def _make_resource_command(name: str):
     fn = click.pass_context(_resource_cmd)
     fn = click.argument("ref", required=False, type=int, metavar="REF")(fn)
     fn = click.option("--force", "-f", "force", is_flag=True, default=False, help="overwrite an existing file without asking")(fn)
-    fn = click.option("--md", "md_path", type=click.Path(), default=None, help="write the item as markdown to PATH")(fn)
+    fn = click.option("--md", "md_path", metavar="DIR", type=click.Path(), default=None, help="write the item as markdown into DIR; the file is named from the ticket title")(fn)
     fn = click.option("--filter", "filters", multiple=True, help="repeatable; key=value")(fn)
     fn = click.option("--limit", type=int, default=None, help="cap the number of listed results")(fn)
     fn = click.option("--plain", "cmd_plain", is_flag=True, help="no color, ASCII only")(fn)

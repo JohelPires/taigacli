@@ -109,6 +109,12 @@ def test_write_markdown_directory_autoname(tmp_path):
     assert path.read_text() == "data"
 
 
+def test_write_markdown_creates_new_folder(tmp_path):
+    path = write_markdown(str(tmp_path / "newdir"), "data", force=True, default_name="story-1-a.md")
+    assert path == tmp_path / "newdir" / "story-1-a.md"
+    assert path.read_text() == "data"
+
+
 def test_write_markdown_overwrite_refused_non_tty(tmp_path):
     target = tmp_path / "x.md"
     target.write_text("old")

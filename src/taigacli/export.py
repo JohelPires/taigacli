@@ -168,7 +168,9 @@ def _confirm_overwrite(target: Path) -> None:
 
 def write_markdown(path_arg: str, content: str, force: bool = False, default_name: str | None = None) -> Path:
     target = Path(path_arg).expanduser()
-    if target.is_dir():
+    # folder-first: an existing directory, or a path with no file extension, takes the derived name
+    is_folder = target.is_dir() or (not target.exists() and target.suffix == "")
+    if is_folder:
         if not default_name:
             raise CliError(f"{target} is a directory")
         target = target / default_name

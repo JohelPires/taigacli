@@ -18,14 +18,16 @@ A terminal-first command-line client for [Taiga](https://taiga.io) boards.
    TAIGA_PROJECT_SLUG=your-project-slug
    ```
 
-   The file is looked up in the current directory and every parent; any of the keys can also be set as regular environment variables (they override the file).
+   Values are merged per key with precedence: environment variables > nearest `.env` walking up from the current directory > `~/.config/taigacli/.env` (the global fallback for system-wide installs). No `.env` is required if all keys come from variables.
 
 2. Install and verify:
 
    ```sh
-   pip install -e '.[dev]'     # or: pipx install -e .
+   uv tool install --editable .    # or: pipx install -e ., or pip install -e '.[dev]' for dev
    taiga whoami
    ```
+
+   `--editable` keeps the install live: after `git pull` the new code runs with no reinstall. Re-run the install only if `pyproject.toml` dependencies change. Uninstall with `uv tool uninstall taigacli`.
 
 Your auth token is cached in `~/.config/taigacli/.token` (honors `XDG_CONFIG_HOME`) after the first call and refreshed automatically on 401. `.env` contains credentials — keep it out of the repo; it is gitignored.
 

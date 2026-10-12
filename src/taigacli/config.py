@@ -13,15 +13,29 @@ def config_dir() -> Path:
 
 
 def env_file() -> Path:
-    paths = []
+    """Highest-precedence discovered .env, or the canonical user config path."""
+    files = env_files()
+    return files[0] if files else config_dir() / ".env"
+
+
+def env_files() -> list[Path]:
+    """Discovered .env files, highest precedence first.
+
+    The nearest .env walking up from cwd wins; a project's own .env (e.g. a
+    Django app) is never let to shadow files above it - we merge per key.
+    The user config file is the global fallback for system-wide installs.
+    """
+    files: list[Path] = []
     cwd = Path.cwd().resolve()
-    paths.extend(cwd.parents)
-    paths.insert(0, cwd)
-    for directory in paths:
+    for directory in (cwd, *cwd.parents):
         candidate = directory / ".env"
         if candidate.is_file():
-            return candidate
-    return cwd / ".env"
+            files.append(candidate)
+            break
+    global_env = config_dir() / ".env"
+    if global_env.is_file() and global_env not in files:
+        files.append(global_env)
+    return files
 
 
 def token_file() -> Path:
@@ -45,10 +59,10 @@ def parse_env_file(path: Path) -> dict[str, str]:
 
 
 def load_env() -> dict:
-    path = env_file()
-    if not path.is_file():
-        raise CliError(f"Missing env file: {path}")
-    return parse_env_file(path)
+    merged: dict[str, str] = {}
+    for path in reversed(env_files()):
+        merged.update(parse_env_file(path))
+    return merged
 
 
 def config() -> dict:
@@ -62,9 +76,10 @@ def config() -> dict:
     }
     missing = [k for k in ("username", "password", "slug") if not out[k] or "your_taiga" in out[k]]
     if missing:
-        from taigacli.errors import CliError
-
-        raise CliError(f"Missing config keys: {', '.join(missing)} - edit {env_file()}")
+        raise CliError(
+            f"Missing config keys: {', '.join(missing)} - set TAIGA_* environment"
+            f" variables or edit {env_file()}"
+        )
     return out
 
 

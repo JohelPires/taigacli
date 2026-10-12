@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from taigacli import config as config_mod
-from taigacli.config import config, env_files, parse_env_file
+from taigacli.config import api_url, config, env_files, parse_env_file
 from taigacli.errors import CliError
 
 
@@ -64,19 +64,26 @@ def test_local_env_shadows_global_but_merges_per_key(cwd: Path, config_home: Pat
 
 
 def test_env_vars_beat_files(cwd: Path, config_home: Path, monkeypatch):
-    (config_home / ".env").write_text("TAIGA_USERNAME=file-user\nTAIGA_PASSWORD=file-pass\nTAIGA_PROJECT_SLUG=file-slug\n")
+    (config_home / ".env").write_text("TAIGA_USERNAME=file-user\nTAIGA_PROJECT_SLUG=file-slug\n")
     monkeypatch.setenv("TAIGA_USERNAME", "env-user")
     out = config()
     assert out["username"] == "env-user"
-    assert out["password"] == "file-pass"
+    assert "password" not in out
 
 
 def test_foreign_project_env_does_not_hijack(cwd: Path, config_home: Path, no_taiga_env):
     # a unrelated .env (like a backend's) missing TAIGA keys, global fills in
     (cwd / ".env").write_text("DATABASE_URL=postgres://x\n")
-    (config_home / ".env").write_text("TAIGA_USERNAME=u\nTAIGA_PASSWORD=p\nTAIGA_PROJECT_SLUG=s\n")
+    (config_home / ".env").write_text("TAIGA_PROJECT_SLUG=s\n")
     out = config()
     assert out["slug"] == "s"
+
+
+def test_config_rejects_missing_slug(cwd: Path, config_home, no_taiga_env, monkeypatch):
+    monkeypatch.setenv("TAIGA_PROJECT_SLUG", "")
+    with pytest.raises(CliError) as exc:
+        config()
+    assert "Missing config keys: slug" in str(exc.value)
 
 
 def test_missing_file_only_fails_on_missing_keys(cwd: Path, config_home, monkeypatch):
@@ -90,12 +97,23 @@ def test_missing_file_only_fails_on_missing_keys(cwd: Path, config_home, monkeyp
 
 def test_env_vars_only_no_env_files(cwd: Path, config_home, monkeypatch):
     monkeypatch.setenv("TAIGA_USERNAME", "u")
-    monkeypatch.setenv("TAIGA_PASSWORD", "p")
     monkeypatch.setenv("TAIGA_PROJECT_SLUG", "s")
     out = config()
     assert out == {
         "api_url": "https://api.taiga.io/api/v1",
         "username": "u",
-        "password": "p",
         "slug": "s",
     }
+
+
+def test_api_url_default_and_env_override(cwd: Path, config_home, monkeypatch):
+    monkeypatch.delenv("TAIGA_API_URL", raising=False)
+    assert api_url() == "https://api.taiga.io/api/v1"
+    monkeypatch.setenv("TAIGA_API_URL", "http://taiga.local/api/v1/")
+    assert api_url() == "http://taiga.local/api/v1"
+
+
+def test_api_url_from_env_file(cwd: Path, config_home, monkeypatch):
+    monkeypatch.delenv("TAIGA_API_URL", raising=False)
+    (config_home / ".env").write_text("TAIGA_API_URL=http://filehost/api/v1\n")
+    assert api_url() == "http://filehost/api/v1"

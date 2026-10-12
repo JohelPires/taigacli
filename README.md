@@ -13,23 +13,22 @@ A terminal-first command-line client for [Taiga](https://taiga.io) boards.
 
    ```ini
    TAIGA_API_URL=https://api.taiga.io/api/v1
-   TAIGA_USERNAME=you@example.com
-   TAIGA_PASSWORD=your-password
    TAIGA_PROJECT_SLUG=your-project-slug
    ```
 
-   Values are merged per key with precedence: environment variables > nearest `.env` walking up from the current directory > `~/.config/taigacli/.env` (the global fallback for system-wide installs). No `.env` is required if all keys come from variables.
+   Values are merged per key with precedence: environment variables > nearest `.env` walking up from the current directory > `~/.config/taigacli/.env` (the global fallback for system-wide installs). No `.env` is required if all keys come from variables. `TAIGA_USERNAME` is optional — it becomes the default at the login prompt.
 
-2. Install and verify:
+2. Install and log in:
 
    ```sh
    uv tool install --editable .    # or: pipx install -e ., or pip install -e '.[dev]' for dev
+   taiga login                     # prompts for username + password (or use -u/--password)
    taiga whoami
    ```
 
    `--editable` keeps the install live: after `git pull` the new code runs with no reinstall. Re-run the install only if `pyproject.toml` dependencies change. Uninstall with `uv tool uninstall taigacli`.
 
-Your auth token is cached in `~/.config/taigacli/.token` (honors `XDG_CONFIG_HOME`) after the first call and refreshed automatically on 401. `.env` contains credentials — keep it out of the repo; it is gitignored.
+`taiga login` exchanges your password (typed once, hidden) for an auth token cached in `~/.config/taigacli/.token` (honors `XDG_CONFIG_HOME`); every other command uses that token and no password is stored anywhere. Running `login` while signed in just reports the current user — run `taiga logout` first to sign in as another user. `taiga logout` deletes the cached token. When the token is missing or expires, commands fail with "run `taiga login`" — just log in again.
 
 ## Usage
 
@@ -55,6 +54,8 @@ taiga issue 12 --json                      # raw JSON payload
 | Command | Description |
 | --- | --- |
 | `mine` | User stories, tasks and issues assigned to you |
+| `login` | Sign in once; saves the auth token (password is never stored) |
+| `logout` | Delete the cached auth token |
 | `<resource> [ref]` | List a resource, or show one item: `stories` (`story`, `userstories`, `userstory`), `tasks` (`task`), `issues` (`issue`), `epics` (`epic`), `milestones` (`milestone`), `members` (`memberships`, `membership`), `wiki`, `timeline` |
 | `set <ref> --<status>` | Change a status (e.g. `set 1344 --in-review`); bare `set <ref>` shows the options |
 | `whoami` | Current user |
@@ -67,6 +68,7 @@ taiga issue 12 --json                      # raw JSON payload
 
 - `--json` — raw JSON payload on stdout
 - `--plain` — no color, ASCII only
+- `login`: `-u/--username`, `--password` — skip the prompts; the password stays hidden when prompted
 - `<resource>`: `--limit N` — cap listing results; `--filter k=v` — repeatable (keys: `project`, `status`, `milestone`, `assigned_to`, `page_size`)
 - `set`: `--dry-run` — preview the change; `--status "In Review"` — target a status by name, slug or id instead of a flag
 - `<resource> <ref>`: `--md DIR` — write the full ticket as markdown into DIR, named from the ticket title; `--force` — overwrite an existing file without asking

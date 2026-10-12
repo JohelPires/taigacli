@@ -6,6 +6,8 @@ from pathlib import Path
 
 from taigacli.errors import CliError
 
+DEFAULT_API_URL = "https://api.taiga.io/api/v1"
+
 
 def config_dir() -> Path:
     base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
@@ -65,16 +67,22 @@ def load_env() -> dict:
     return merged
 
 
+def api_url() -> str:
+    """Resolved API URL with no validation, so login works before a slug is set."""
+    env = os.environ
+    cfg = load_env()
+    return (env.get("TAIGA_API_URL") or cfg.get("TAIGA_API_URL", DEFAULT_API_URL)).rstrip("/")
+
+
 def config() -> dict:
     env = os.environ
     cfg = load_env()
     out = {
-        "api_url": env.get("TAIGA_API_URL") or cfg.get("TAIGA_API_URL", "https://api.taiga.io/api/v1").rstrip("/"),
+        "api_url": api_url(),
         "username": env.get("TAIGA_USERNAME") or cfg.get("TAIGA_USERNAME"),
-        "password": env.get("TAIGA_PASSWORD") or cfg.get("TAIGA_PASSWORD"),
         "slug": env.get("TAIGA_PROJECT_SLUG") or cfg.get("TAIGA_PROJECT_SLUG"),
     }
-    missing = [k for k in ("username", "password", "slug") if not out[k] or "your_taiga" in out[k]]
+    missing = [k for k in ("slug",) if not out[k] or "your_taiga" in out[k]]
     if missing:
         raise CliError(
             f"Missing config keys: {', '.join(missing)} - set TAIGA_* environment"

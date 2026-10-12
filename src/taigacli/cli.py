@@ -6,6 +6,7 @@ import click
 
 from taigacli import commands
 from taigacli.api import Api
+from taigacli.config import api_url
 from taigacli.errors import CliError
 from taigacli.resources import RESOURCE_CANONICAL, RESOURCE_HELP, RESOURCE_SPECS
 from taigacli.theme import ui_init
@@ -77,6 +78,26 @@ def _api() -> Api:
 def mine(ctx, limit, cmd_json, cmd_plain):
     _ui(ctx)
     commands.cmd_mine(_api(), ctx, limit)
+
+
+@taiga.command(name="login", help="sign in and cache an auth token")
+@click.option("--username", "-u", default=None, help="Taiga username or email")
+@click.option("--password", default=None, help="Taiga password (prefer the prompt)")
+@click.option("--json", "cmd_json", is_flag=True, help="raw JSON output")
+@click.option("--plain", "cmd_plain", is_flag=True, help="no color, ASCII only")
+@click.pass_context
+def login_cmd(ctx, username, password, cmd_json, cmd_plain):
+    _ui(ctx)
+    commands.cmd_login(api_url(), username, password, ctx)
+
+
+@taiga.command(name="logout", help="forget the cached auth token")
+@click.option("--json", "cmd_json", is_flag=True, help="raw JSON output")
+@click.option("--plain", "cmd_plain", is_flag=True, help="no color, ASCII only")
+@click.pass_context
+def logout_cmd(ctx, cmd_json, cmd_plain):
+    _ui(ctx)
+    commands.cmd_logout(ctx)
 
 
 @taiga.command(name="whoami", help="the signed-in account")

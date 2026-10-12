@@ -290,6 +290,82 @@ def cmd_get_md(api, ctx, resource: str, item_id: int, md_path: str, force: bool)
     print(paint(g("dot"), "ready") + " " + paint(f"saved {written}", "muted"), file=sys.stderr)
 
 
+def cmd_login(api_url: str, username: str | None, password: str | None, ctx):
+    import click
+    import httpx
+
+    from taigacli import api as api_mod
+    from taigacli.config import load_env
+
+    client = httpx.Client(base_url=api_url, follow_redirects=False)
+    if not _print_session(api_mod, client, api_url, username, ctx):
+        return
+    if username is None:
+        default = load_env().get("TAIGA_USERNAME")
+        username = click.prompt("Username", default=default, show_default=bool(default))
+    if password is None:
+        password = click.prompt("Password", hide_input=True)
+    token = api_mod.login(api_url, username, password, client)
+    me = _me(api_mod, client, token, api_url)
+    user = me if isinstance(me, dict) else {}
+    if is_json(ctx):
+        print(json.dumps({"already_logged_in": False, "user": user}))
+        return
+    name = user.get("full_name") or user.get("username") or username
+    print()
+    print(GUTTER + paint(g("dot"), "ready") + " " + paint(str(name), "ink", bold=True))
+    print(GUTTER + paint("logged in - token saved", "muted"))
+    print()
+
+
+def _me(api_mod, client, token: str, api_url: str):
+    try:
+        return api_mod.request({"api_url": api_url}, client, token, "GET", "users/me")
+    except CliError:
+        return None
+
+
+def _print_session(api_mod, client, api_url: str, username: str | None, ctx) -> bool:
+    """Verify any cached session; True means a fresh login should proceed.
+
+    A 401 clears the token inside request(), so a stale session re-logins.
+    Explicit credentials are ignored while a valid session exists: switching
+    users always goes through `taiga logout` first.
+    """
+    token = api_mod.load_token()
+    if not token:
+        return True
+    me = _me(api_mod, client, token, api_url)
+    if not isinstance(me, dict):
+        return True
+    if is_json(ctx):
+        print(json.dumps({"already_logged_in": True, "user": me}))
+        return False
+    name = me.get("full_name") or me.get("username") or "?"
+    print()
+    print(GUTTER + paint(g("dot"), "ready") + " " + paint(str(name), "ink", bold=True))
+    print(GUTTER + paint("already logged in - run `taiga logout` first to sign in as another user", "muted"))
+    print()
+    return False
+
+
+def cmd_logout(ctx):
+    from taigacli.api import clear_token
+    from taigacli.config import token_file
+
+    path = token_file()
+    if clear_token():
+        if is_json(ctx):
+            print(json.dumps({"logged_out": True, "token_file": str(path)}))
+            return
+        print(GUTTER + paint(f"removed {path}", "muted"))
+    else:
+        if is_json(ctx):
+            print(json.dumps({"logged_out": False, "token_file": str(path)}))
+            return
+        print(GUTTER + paint("not logged in", "muted"))
+
+
 def new_status_name(status: dict) -> str:
     return str(status.get("name", ""))
 

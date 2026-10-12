@@ -1,37 +1,58 @@
 from __future__ import annotations
 
 import json
-import sys
 import urllib.parse
 
 import httpx
 
-from taigacli.config import config, load_env, secure, token_file
+from taigacli.config import config, secure, token_file
 from taigacli.errors import CliError
 from taigacli.resources import HISTORY_KINDS, STATUS_KINDS
 
-_token_cache: dict[str, str] = {}
+
+NOT_LOGGED_IN = "Not logged in - run `taiga login`"
 
 
-def get_token(cfg: dict, client: httpx.Client, refresh: bool = False) -> str:
+def load_token() -> str | None:
     tf = token_file()
-    if not refresh and tf.is_file():
+    if tf.is_file():
         token = tf.read_text().strip()
         if token:
             return token
-    print("Authenticating to Taiga...", file=sys.stderr, flush=True)
-    payload = {"type": "normal", "username": cfg["username"], "password": cfg["password"]}
-    response = client.post(f"{cfg['api_url']}/auth", json=payload)
+    return None
+
+
+def get_token(cfg: dict, client: httpx.Client) -> str:
+    token = load_token()
+    if token:
+        return token
+    raise CliError(NOT_LOGGED_IN)
+
+
+def login(api_url: str, username: str, password: str, client: httpx.Client) -> str:
+    payload = {"type": "normal", "username": username, "password": password}
+    try:
+        response = client.post(f"{api_url}/auth", json=payload)
+    except httpx.HTTPError as e:
+        raise CliError(f"Connection error: {e}")
     if response.status_code >= 400:
-        raise CliError(f"Auth failed ({response.status_code}): {response.text}")
+        raise CliError(f"Login failed ({response.status_code}): {response.text}")
     token = response.json().get("auth_token")
     if not token:
-        raise CliError("Auth succeeded but no auth_token returned")
+        raise CliError("Login succeeded but no auth_token returned")
+    tf = token_file()
     tf.parent.mkdir(parents=True, exist_ok=True)
     tf.write_text(token)
     secure(tf)
-    _token_cache["token"] = token
     return token
+
+
+def clear_token() -> bool:
+    tf = token_file()
+    if tf.is_file():
+        tf.unlink()
+        return True
+    return False
 
 
 def request(
@@ -43,7 +64,6 @@ def request(
     params: dict | None = None,
     body: dict | None = None,
     soft: bool = False,
-    retry: bool = True,
 ):
     url = path if path.startswith("http") else f"{cfg['api_url']}/{path.lstrip('/')}"
     if params:
@@ -55,16 +75,16 @@ def request(
         raise CliError(f"Connection error: {e}")
     if response.status_code == 404 and soft:
         return None
-    if response.status_code == 401 and retry:
-        token = get_token(cfg, client, refresh=True)
-        return request(cfg, client, token, method, path, params, body, soft, retry=False)
+    if response.status_code == 401:
+        clear_token()
+        raise CliError("Session expired - run `taiga login`")
     if response.status_code >= 400:
         raise CliError(f"API error {response.status_code} on {path}: {response.text}")
     resp_body = response.text
     resp = json.loads(resp_body) if resp_body else None
     next_link = response.headers.get("x-next")
     if next_link and url != next_link:
-        more = request(cfg, client, enrolled_token, method, next_link, retry=False)
+        more = request(cfg, client, enrolled_token, method, next_link)
         if isinstance(resp, list) and isinstance(more, list):
             resp.extend(more)
     return resp
@@ -153,4 +173,4 @@ class Api:
             return None
 
 
-__all__ = ["Api", "get_token", "load_env", "request", "config"]
+__all__ = ["Api", "get_token", "load_token", "login", "clear_token", "load_env", "request", "config"]

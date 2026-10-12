@@ -96,7 +96,7 @@ def test_cli_help_lists_commands():
     result = CliRunner().invoke(cli.taiga, ["--help"])
     assert result.exit_code == 0
     out = result.output
-    for name in ("mine", "stories", "tasks", "issues", "epics", "milestones", "wiki", "timeline", "set", "whoami", "project", "help"):
+    for name in ("mine", "stories", "tasks", "issues", "epics", "milestones", "wiki", "timeline", "set", "whoami", "project", "login", "logout", "help"):
         assert name in out
 
 
@@ -109,7 +109,7 @@ class FakeApi:
     story_only: bool = True
 
     def __init__(self, ref=1343):
-        self.cfg = {"slug": "proj", "api_url": "http://x", "username": "u", "password": "p"}
+        self.cfg = {"slug": "proj", "api_url": "http://x", "username": "u"}
         self._ref = ref
         self.item = _norm_item({"ref": self._ref, "subject": "Subj", "status_extra_info": {"name": "New"}, "id": 5})
 

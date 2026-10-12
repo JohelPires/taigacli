@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import textwrap
 
 from taigacli.errors import CliError
@@ -268,8 +269,6 @@ def cmd_set(api, ctx, tokens: list, status_opt: str | None, dry_run: bool):
 
 
 def cmd_get_md(api, ctx, resource: str, item_id: int, md_path: str, force: bool):
-    import sys as _sys
-
     from taigacli import export
     from taigacli.theme import g
 
@@ -288,7 +287,7 @@ def cmd_get_md(api, ctx, resource: str, item_id: int, md_path: str, force: bool)
         force=force,
         default_name=export.auto_name(resource, item),
     )
-    print(paint(g("dot"), "ready") + " " + paint(f"saved {written}", "muted"), file=_sys.stderr)
+    print(paint(g("dot"), "ready") + " " + paint(f"saved {written}", "muted"), file=sys.stderr)
 
 
 def new_status_name(status: dict) -> str:

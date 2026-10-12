@@ -9,6 +9,8 @@ from taigacli.export import (
     html_to_md,
     render_markdown,
     slugify,
+    ticket_url,
+    web_base,
     write_markdown,
 )
 from taigacli.errors import CliError
@@ -72,6 +74,59 @@ def test_front_matter_fields():
     assert "assignee: Johel Pires" in fm
     assert "tags: [frontend, scoring]" in fm
     assert fm.splitlines()[0] == "---" and fm.splitlines()[-1].rstrip() == "---"
+
+
+def test_web_base_hosted():
+    assert web_base("https://api.taiga.io/api/v1") == "https://tree.taiga.io"
+
+
+def test_web_base_self_hosted():
+    assert web_base("https://taiga.example.com/api/v1") == "https://taiga.example.com"
+    assert web_base("https://team.example.org/taiga/api/v1") == "https://team.example.org/taiga"
+
+
+def test_web_base_invalid():
+    assert web_base("") == ""
+    assert web_base("not-a-url") == ""
+
+
+def test_ticket_url_per_resource():
+    hosted = "https://api.taiga.io/api/v1"
+    assert ticket_url(hosted, "my-slug", "userstories", STORY) == "https://tree.taiga.io/project/my-slug/us/1343"
+    assert ticket_url(hosted, "my-slug", "tasks", {"ref": 7, "id": 99}) == "https://tree.taiga.io/project/my-slug/task/7"
+    assert ticket_url(hosted, "my-slug", "issues", {"ref": 8}) == "https://tree.taiga.io/project/my-slug/issue/8"
+    assert ticket_url(hosted, "my-slug", "epics", {"ref": 9}) == "https://tree.taiga.io/project/my-slug/epic/9"
+
+
+def test_ticket_url_falls_back_to_id():
+    hosted = "https://api.taiga.io/api/v1"
+    assert ticket_url(hosted, "s", "tasks", {"id": 42}) == "https://tree.taiga.io/project/s/task/42"
+
+
+def test_ticket_url_none_cases():
+    hosted = "https://api.taiga.io/api/v1"
+    assert ticket_url(hosted, "s", "wiki", {"slug": "home"}) is None
+    assert ticket_url(hosted, "s", "milestones", {"id": 5}) is None
+    assert ticket_url(hosted, None, "tasks", {"ref": 1}) is None
+    assert ticket_url("", "s", "tasks", {"ref": 1}) is None
+
+
+def test_front_matter_includes_url():
+    fm = "\n".join(front_matter(STORY, "userstories", url="https://tree.taiga.io/project/s/us/1343"))
+    assert "url: https://tree.taiga.io/project/s/us/1343" in fm
+    # id line directly precedes the url line
+    lines = fm.splitlines()
+    assert lines[lines.index("url: https://tree.taiga.io/project/s/us/1343") - 1].startswith("id:")
+
+
+def test_front_matter_without_url():
+    assert not any(line.startswith("url:") for line in front_matter(STORY, "userstories"))
+
+
+def test_render_markdown_includes_url():
+    md = render_markdown(STORY, "userstories", {}, url="https://tree.taiga.io/project/s/us/1343")
+    assert md.startswith("---\ntype: story")
+    assert "url: https://tree.taiga.io/project/s/us/1343" in md
 
 
 def test_render_markdown_sections():

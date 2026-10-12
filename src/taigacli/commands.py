@@ -280,7 +280,8 @@ def cmd_get_md(api, ctx, resource: str, item_id: int, md_path: str, force: bool)
     if not isinstance(item, dict):
         raise CliError(f"Not found: {LABELS.get(path, path)} {item_id}")
     extras = export.collect(api, resource, item)
-    content = export.render_markdown(item, resource, extras)
+    url = export.ticket_url(api.cfg.get("api_url"), api.cfg.get("slug"), resource, item)
+    content = export.render_markdown(item, resource, extras, url=url)
     written = export.write_markdown(
         md_path,
         content,

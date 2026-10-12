@@ -79,14 +79,14 @@ Re-setting the current status is a no-op. Refs are per-type: if a ref exists as 
 
 `--md DIR` saves a full ticket as a Markdown file (one `GET` and a few best-effort calls; a failing section is omitted, never fatal):
 
-- YAML-ish front matter: type, ref, status, assignee, milestone, tags, created, modified, id
+- YAML-ish front matter: type, ref, id, url, status, assignee, milestone, tags, created, modified
 - `# Subject`, the description (HTML converted to Markdown)
 - Acceptance criteria (client/team requirements) for user stories
 - Child tasks for a user story
 - Comments from the item history
 - Attachment index (name + size; files are not downloaded)
 
-Path semantics: `DIR` is folder-first — only a path with a file extension (e.g. `.md`) is taken as an explicit file name. The folder is created if missing and the file inside is named `<type>-<ref>-<subject-slug>.md` from the ticket title. If the target file exists you are asked to confirm overwrite (or pass `--force`; from a non-interactive shell a prompt is refused). `--md` without a ref is an error.
+Path semantics: `DIR` is folder-first — only a path with a file extension (e.g. `.md`) is taken as an explicit file name. The folder is created if missing and the file inside is named `<type>-<ref>-<subject-slug>.md` from the ticket title. If the target file exists you are asked to confirm overwrite (or pass `--force`; from a non-interactive shell a prompt is refused). `--md` without a ref is an error. Stories, tasks, issues and epics also carry a `url:` front-matter link to the ticket on the web — derived from `TAIGA_API_URL` (hosted `api.taiga.io` maps to `tree.taiga.io`; self-hosted drops the `/api/v1` suffix) plus the project slug and ref.
 
 ```sh
 taiga story 1343 --md ./stories            # ./stories/story-1343-<title-slug>.md

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import sys
+import urllib.parse
 from pathlib import Path
 
 from markdownify import markdownify as _markdownify
@@ -18,6 +19,43 @@ TYPE_SLUGS = {
     "milestones": "milestone",
     "wiki": "wiki",
 }
+
+# web path segment per ref-addressable ticket resource
+TICKET_PATHS = {
+    "userstories": "us",
+    "tasks": "task",
+    "issues": "issue",
+    "epics": "epic",
+}
+
+
+def web_base(api_url: str) -> str:
+    """Frontend base URL derived from the API URL.
+
+    Hosted Taiga serves the UI from tree.taiga.io; self-hosted instances
+    live on the same host as the API with the /api/v1 suffix removed.
+    """
+    parsed = urllib.parse.urlsplit(api_url or "")
+    if not parsed.netloc:
+        return ""
+    if parsed.netloc == "api.taiga.io":
+        return "https://tree.taiga.io"
+    path = parsed.path
+    if path.endswith("/api/v1"):
+        path = path[: -len("/api/v1")]
+    return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, path.rstrip("/"), "", ""))
+
+
+def ticket_url(api_url: str, slug: str | None, resource: str, item: dict) -> str | None:
+    """Full web URL of a ticket, or None when it cannot be built."""
+    segment = TICKET_PATHS.get(resource)
+    base = web_base(api_url)
+    if not segment or not base or not slug:
+        return None
+    key = item.get("ref") or item.get("id")
+    if not key:
+        return None
+    return f"{base}/project/{slug}/{segment}/{key}"
 
 
 def html_to_md(text) -> str:
@@ -47,7 +85,7 @@ def _one(value) -> str:
     return str(value or "").strip()
 
 
-def front_matter(item: dict, resource: str) -> list[str]:
+def front_matter(item: dict, resource: str, url: str | None = None) -> list[str]:
     n = _norm_item(item)
     lines = ["---"]
     if resource in TYPE_SLUGS:
@@ -56,6 +94,8 @@ def front_matter(item: dict, resource: str) -> list[str]:
         lines.append(f"ref: {item['ref']}")
     if item.get("id"):
         lines.append(f"id: {item['id']}")
+    if url:
+        lines.append(f"url: {url}")
     if n["status"]:
         lines.append(f"status: {n['status']}")
     if n["assignee"]:
@@ -141,10 +181,10 @@ def body_markdown(item: dict, resource: str) -> list[str]:
     return [body] if (body := html_to_md(item.get("description"))) else []
 
 
-def render_markdown(item: dict, resource: str, extras: dict | None = None) -> str:
+def render_markdown(item: dict, resource: str, extras: dict | None = None, url: str | None = None) -> str:
     extras = extras or {}
     n = _norm_item(item)
-    lines = front_matter(item, resource)
+    lines = front_matter(item, resource, url)
     lines.append("")
     lines.append(f"# {n['subject'] or n['ref']}")
     for part in body_markdown(item, resource):

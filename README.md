@@ -2,8 +2,6 @@
 
 A terminal-first command-line client for [Taiga](https://taiga.io) boards.
 
-Single file (`taiga.py`), Python standard library only — no `pip install`, no dependencies, one `.env` file for setup. It covers all read operations and one write: `set` changes statuses.
-
 ## Requirements
 
 - Python 3.10+
@@ -20,31 +18,34 @@ Single file (`taiga.py`), Python standard library only — no `pip install`, no 
    TAIGA_PROJECT_SLUG=your-project-slug
    ```
 
-   Any of these can also be set as regular environment variables (they override `.env`).
+   The file is looked up in the current directory and every parent; any of the keys can also be set as regular environment variables (they override the file).
 
-2. Verify it works:
+2. Install and verify:
 
    ```sh
-   python taiga.py whoami
+   pip install -e '.[dev]'     # or: pipx install -e .
+   taiga whoami
    ```
 
-Your auth token is cached in `.token` after the first call and refreshed automatically on 401. Both `.env` and `.token` are gitignored — keep your credentials out of the repo.
+Your auth token is cached in `~/.config/taigacli/.token` (honors `XDG_CONFIG_HOME`) after the first call and refreshed automatically on 401. `.env` contains credentials — keep it out of the repo; it is gitignored.
 
 ## Usage
 
 ```
-taiga.py <command> [options]
+taiga <command> [options]
 ```
 
 ```sh
-taiga.py mine                                 # open user stories / tasks / issues assigned to you
-taiga.py tasks                                # list tasks
-taiga.py task 1343                            # show one task by ref
-taiga.py set 1344 --in-review                 # change a status
-taiga.py set 1344 --done --dry-run            # preview the change without saving
-taiga.py tasks --filter assigned_to=115       # filter listings (repeatable)
-taiga.py issue 12 --json                      # raw JSON payload
+taiga mine                                 # open user stories / tasks / issues assigned to you
+taiga tasks                                # list tasks
+taiga task 1343                            # show one task by ref
+taiga set 1344 --in-review                 # change a status
+taiga set 1344 --done --dry-run            # preview the change without saving
+taiga tasks --filter assigned_to=115       # filter listings (repeatable)
+taiga issue 12 --json                      # raw JSON payload
 ```
+
+`python -m taigacli` works the same as the `taiga` script.
 
 ## Commands
 
@@ -57,7 +58,7 @@ taiga.py issue 12 --json                      # raw JSON payload
 | `project` | Resolved project by slug |
 | `help` | Command overview |
 
-`stories`/`tasks`/`issues`/`epics` and their singular aliases resolve by ref. `milestones`, `members` and `wiki` take an item id; `timeline` lists only (it has no per-item lookup). `--filter`/`--limit` are accepted everywhere but ignored when a ref/id is given.
+`stories`/`tasks`/`issues`/`epics` and their singular aliases resolve by ref. `milestones`, `members` and `wiki` take an item id; `timeline` lists only (it has no per-item lookup). `--filter`/`--limit` are accepted everywhere but ignored when a ref/id is given. Resource commands are exact words — no abbreviations.
 
 ## Flags
 
@@ -66,8 +67,17 @@ taiga.py issue 12 --json                      # raw JSON payload
 - `<resource>`: `--limit N` — cap listing results; `--filter k=v` — repeatable (keys: `project`, `status`, `milestone`, `assigned_to`, `page_size`)
 - `set`: `--dry-run` — preview the change; `--status "In Review"` — target a status by name, slug or id instead of a flag
 
-Re-setting the current status is a no-op. Refs are per-type: if a ref exists as more than one of user story / task / issue, `set` prints the candidates and asks for a resource prefix (e.g. `set story <ref>`). Resource commands are exact words — no abbreviations.
+Re-setting the current status is a no-op. Refs are per-type: if a ref exists as more than one of user story / task / issue, `set` prints the candidates and asks for a resource prefix (e.g. `set story <ref>`).
 
 ## Output styling
 
 Colors are rendered as truecolor/256-color ANSI when stdout is a tty, and plain when piped. Color is disabled by `NO_COLOR` or `TERM=dumb`; force it when piped with `TAIGA_COLOR=1`. For scripts, prefer `--plain` (ASCII only) or `--json` (machine-readable).
+
+## Development
+
+```sh
+pip install -e '.[dev]'
+pytest
+```
+
+`taiga --help` is the authoritative command reference — keep `README.md` in sync with it when adding commands or flags.

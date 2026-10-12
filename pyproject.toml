@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "taigacli"
+version = "0.1.0"
+description = "Terminal-first command-line client for Taiga boards"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "click>=8.1",
+    "httpx>=0.27",
+    "markdownify>=0.13",
+    "beautifulsoup4>=4.12",
+]
+
+[project.scripts]
+taiga = "taigacli.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

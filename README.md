@@ -38,6 +38,7 @@ taiga <command> [options]
 
 ```sh
 taiga mine                                 # open user stories / tasks / issues assigned to you
+taiga mine --md ./mine                     # export all of them as markdown files
 taiga tasks                                # list tasks
 taiga task 1343                            # show one task by ref
 taiga story 1343 --md ./stories            # export a ticket as markdown into a folder (filename derived from the title)
@@ -53,7 +54,7 @@ taiga issue 12 --json                      # raw JSON payload
 
 | Command | Description |
 | --- | --- |
-| `mine` | User stories, tasks and issues assigned to you |
+| `mine` | User stories, tasks and issues assigned to you; `--md DIR` exports them all as markdown |
 | `login` | Sign in once; the token is cached and the password kept in the OS keyring so tokens renew silently (`--no-remember` opts out) |
 | `logout` | Delete the cached auth token and the remembered keyring credential |
 | `<resource> [ref]` | List a resource, or show one item: `stories` (`story`, `userstories`, `userstory`), `tasks` (`task`), `issues` (`issue`), `epics` (`epic`), `milestones` (`milestone`), `members` (`memberships`, `membership`), `wiki`, `timeline` |
@@ -69,6 +70,7 @@ taiga issue 12 --json                      # raw JSON payload
 - `--json` — raw JSON payload on stdout
 - `--plain` — no color, ASCII only
 - `login`: `-u/--username`, `--password` — skip the prompts; the password stays hidden when prompted; `--remember/--no-remember` (default: remember) — whether the password is stored in the OS keyring for silent token renewal
+- `mine`: `--md DIR` — export every listed ticket as markdown into the folder DIR (existing files are overwritten)
 - `<resource>`: `--limit N` — cap listing results; `--filter k=v` — repeatable (keys: `project`, `status`, `milestone`, `assigned_to`, `page_size`)
 - `set`: `--dry-run` — preview the change; `--status "In Review"` — target a status by name, slug or id instead of a flag
 - `<resource> <ref>`: `--md DIR` — write the full ticket as markdown into DIR, named from the ticket title; `--force` — overwrite an existing file without asking
@@ -92,6 +94,12 @@ Path semantics: `DIR` is folder-first — only a path with a file extension (e.g
 taiga story 1343 --md ./stories            # ./stories/story-1343-<title-slug>.md
 taiga story 1343 --md ./stories/1343.md    # explicit file name still works
 taiga issue 12 --md ~/notes -f             # -f == --force
+```
+
+`taiga mine --md DIR` exports every open ticket assigned to you (user stories, tasks and issues) into the folder in one go, using the same layout and naming; each ticket's full detail is fetched so the files match a single-ticket export. Because it is a batch, it overwrites any same-named file without prompting. The exported paths go to stderr, followed by a `N tickets saved to DIR` summary.
+
+```sh
+taiga mine --md ./mine                     # ./mine/story-1343-<slug>.md, task-…, issue-…
 ```
 
 ## Output styling

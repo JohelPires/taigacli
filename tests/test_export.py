@@ -5,6 +5,7 @@ import pytest
 from taigacli.export import (
     auto_name,
     body_markdown,
+    export_item,
     front_matter,
     html_to_md,
     render_markdown,
@@ -186,3 +187,34 @@ def test_write_markdown_overwrite_force(tmp_path):
 
 def test_body_markdown_empty():
     assert body_markdown({"subject": "x"}, "tasks") == []
+
+
+class _FakeApi:
+    cfg = {"api_url": "https://api.taiga.io/api/v1", "slug": "my-slug"}
+
+    def history(self, resource, item_id):
+        return None
+
+    def attachments(self, resource, item_id):
+        return None
+
+    def child_tasks(self, story_id):
+        return None
+
+
+def test_export_item_writes(tmp_path):
+    path = export_item(_FakeApi(), "userstories", STORY, str(tmp_path))
+    assert path == tmp_path / auto_name("userstories", STORY)
+    body = path.read_text()
+    assert body.startswith("---\ntype: story")
+    assert "# Set tutor test level thresholds" in body
+    assert "url: https://tree.taiga.io/project/my-slug/us/1343" in body
+
+
+def test_export_item_overwrites(tmp_path):
+    export_item(_FakeApi(), "userstories", STORY, str(tmp_path))
+    target = tmp_path / auto_name("userstories", STORY)
+    target.write_text("stale")
+    export_item(_FakeApi(), "userstories", STORY, str(tmp_path))
+    assert target.read_text() != "stale"
+

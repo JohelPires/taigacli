@@ -73,7 +73,7 @@ def cmd_get(api, ctx, resource: str, item_id: int):
         print(json.dumps(data, indent=2))
 
 
-def cmd_mine(api, ctx, limit: int | None):
+def cmd_mine(api, ctx, limit: int | None, md_path: str | None = None):
     proj = api.project()
     me = api.get("users/me")
     uid = me.get("id")
@@ -87,6 +87,9 @@ def cmd_mine(api, ctx, limit: int | None):
         if isinstance(data, list) and limit:
             data = data[:limit]
         groups[resource] = data if isinstance(data, list) else ([] if data is None else [data])
+    if md_path:
+        _mine_export(api, groups, md_path)
+        return
     if is_json(ctx):
         print(json.dumps(groups, indent=2))
         return
@@ -101,6 +104,23 @@ def cmd_mine(api, ctx, limit: int | None):
         print(eyebrow(label, f"{len(rows)} open"))
         print(render_rows(rows, compact=True, empty_text="nothing assigned to you"))
         print()
+
+
+def _mine_export(api, groups: dict, md_path: str) -> None:
+    from taigacli import export
+
+    written = []
+    for resource, items in groups.items():
+        for item in items:
+            if not isinstance(item, dict) or not item.get("ref"):
+                continue
+            detail = api.by_ref(resource, item["ref"], soft=True)
+            if not isinstance(detail, dict):
+                continue
+            path = export.export_item(api, resource, detail, md_path, force=True)
+            written.append(path)
+            print(GUTTER + paint(f"saved {path}", "muted"), file=sys.stderr)
+    print(GUTTER + paint(f"{len(written)} tickets saved to {md_path}", "muted"), file=sys.stderr)
 
 
 def cmd_whoami(api, ctx):
@@ -280,15 +300,7 @@ def cmd_get_md(api, ctx, resource: str, item_id: int, md_path: str, force: bool)
         item = api.get(f"{path}/{item_id}")
     if not isinstance(item, dict):
         raise CliError(f"Not found: {LABELS.get(path, path)} {item_id}")
-    extras = export.collect(api, resource, item)
-    url = export.ticket_url(api.cfg.get("api_url"), api.cfg.get("slug"), resource, item)
-    content = export.render_markdown(item, resource, extras, url=url)
-    written = export.write_markdown(
-        md_path,
-        content,
-        force=force,
-        default_name=export.auto_name(resource, item),
-    )
+    written = export.export_item(api, resource, item, md_path, force=force)
     print(paint(g("dot"), "ready") + " " + paint(f"saved {written}", "muted"), file=sys.stderr)
 
 

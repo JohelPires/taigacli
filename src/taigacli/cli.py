@@ -72,12 +72,13 @@ def _api() -> Api:
 
 @taiga.command(help="list open userstories/tasks/issues assigned to me")
 @click.option("--limit", type=int, default=None)
+@click.option("--md", "md_path", metavar="DIR", type=click.Path(file_okay=False), default=None, help="export every listed ticket as markdown into DIR")
 @click.option("--json", "cmd_json", is_flag=True, help="raw JSON output")
 @click.option("--plain", "cmd_plain", is_flag=True, help="no color, ASCII only")
 @click.pass_context
-def mine(ctx, limit, cmd_json, cmd_plain):
+def mine(ctx, limit, md_path, cmd_json, cmd_plain):
     _ui(ctx)
-    commands.cmd_mine(_api(), ctx, limit)
+    commands.cmd_mine(_api(), ctx, limit, md_path)
 
 
 @taiga.command(name="login", help="sign in and cache an auth token")

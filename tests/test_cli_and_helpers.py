@@ -160,3 +160,47 @@ def test_already_current_noop(capsys):
     cmd_set(Statuses(), Ctx(), ["1343"], "New", False)
     out = capsys.readouterr().out
     assert "already" in out
+
+
+def test_mine_md_exports(tmp_path, monkeypatch):
+    ui_init(plain=True)
+    story = {"ref": 1343, "id": 5, "subject": "Story subj", "status_extra_info": {"name": "New"}}
+    task = {"ref": 9, "id": 6, "subject": "Task subj", "status_extra_info": {"name": "New"}}
+
+    class MineApi:
+        cfg = {"slug": "proj", "api_url": "https://api.taiga.io/api/v1"}
+
+        def project(self):
+            return {"id": 1, "slug": "proj"}
+
+        def get(self, path, params=None, soft=False):
+            if path == "users/me":
+                return {"id": 42, "full_name": "Jane"}
+            if path == "userstories":
+                return [story]
+            if path == "tasks":
+                return [task]
+            return []
+
+        def by_ref(self, resource, ref, soft=False):
+            return dict(story if resource == "userstories" else task)
+
+        def history(self, resource, item_id):
+            return None
+
+        def attachments(self, resource, item_id):
+            return None
+
+        def child_tasks(self, story_id):
+            return None
+
+    monkeypatch.setattr(cli, "_api", lambda: MineApi())
+    result = CliRunner().invoke(cli.taiga, ["mine", "--md", str(tmp_path)])
+    assert result.exit_code == 0, result.output + result.stderr
+    names = sorted(p.name for p in tmp_path.glob("*.md"))
+    assert len(names) == 2
+    assert any(n.startswith("story-1343-") for n in names)
+    assert any(n.startswith("task-9-") for n in names)
+    assert "2 tickets saved" in result.stderr
+    assert "Story subj" in (tmp_path / names[0]).read_text() or "Story subj" in (tmp_path / names[1]).read_text()
+

@@ -221,6 +221,13 @@ def write_markdown(path_arg: str, content: str, force: bool = False, default_nam
     return target
 
 
+def export_item(api, resource: str, item: dict, path: str, force: bool = True) -> Path:
+    extras = collect(api, resource, item)
+    url = ticket_url(api.cfg.get("api_url"), api.cfg.get("slug"), resource, item)
+    content = render_markdown(item, resource, extras, url=url)
+    return write_markdown(path, content, force=force, default_name=auto_name(resource, item))
+
+
 def collect(api, resource: str, item: dict) -> dict:
     item_id = item.get("id")
     extras = {"tasks": None, "comments": None, "attachments": None}

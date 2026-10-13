@@ -83,12 +83,17 @@ def mine(ctx, limit, cmd_json, cmd_plain):
 @taiga.command(name="login", help="sign in and cache an auth token")
 @click.option("--username", "-u", default=None, help="Taiga username or email")
 @click.option("--password", default=None, help="Taiga password (prefer the prompt)")
+@click.option(
+    "--remember/--no-remember",
+    default=True,
+    help="keep the password in the OS keyring so tokens renew silently (default: remember)",
+)
 @click.option("--json", "cmd_json", is_flag=True, help="raw JSON output")
 @click.option("--plain", "cmd_plain", is_flag=True, help="no color, ASCII only")
 @click.pass_context
-def login_cmd(ctx, username, password, cmd_json, cmd_plain):
+def login_cmd(ctx, username, password, remember, cmd_json, cmd_plain):
     _ui(ctx)
-    commands.cmd_login(api_url(), username, password, ctx)
+    commands.cmd_login(api_url(), username, password, ctx, remember=remember)
 
 
 @taiga.command(name="logout", help="forget the cached auth token")

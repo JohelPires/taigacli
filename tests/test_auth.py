@@ -145,7 +145,11 @@ def test_cmd_login_json(token_store, fake_http, monkeypatch, capsys):
     monkeypatch.setattr(api_mod, "login", lambda url, user, pwd, client: "tok-1")
     monkeypatch.setattr(api_mod, "request", lambda *a, **k: {"id": 7})
     commands.cmd_login("http://x/api", "user", "pass", _ctx(json=True))
-    assert json.loads(capsys.readouterr().out) == {"already_logged_in": False, "user": {"id": 7}}
+    assert json.loads(capsys.readouterr().out) == {
+        "already_logged_in": False,
+        "user": {"id": 7},
+        "remembered": False,  # autouse fixture keeps the OS keyring offline in tests
+    }
 
 
 def test_cmd_login_json_never_contains_token(token_store, fake_http, monkeypatch, capsys):
@@ -303,3 +307,91 @@ def test_api_call_picks_up_renewed_token(token_store, monkeypatch):
     assert api.token == "stale"
     api.call("GET", "users/me")
     assert api.token == "fresh"  # self.token synced from the file
+
+
+def test_cmd_login_remembered_message(fake_http, token_store, monkeypatch, capsys):
+    monkeypatch.setattr(api_mod, "login", lambda url, user, pwd, client: "tok-1")
+    monkeypatch.setattr(api_mod, "request", lambda *a, **k: {"full_name": "Jane Doe"})
+    monkeypatch.setattr("taigacli.credentials.save", lambda *a, **k: True)
+    monkeypatch.setattr("taigacli.credentials.forget", lambda *a, **k: False)
+    commands.cmd_login("http://x/api", "user", "pass", _ctx())
+    out = capsys.readouterr().out
+    assert "remembered via OS keyring" in out
+
+
+def test_cmd_login_keyring_unavailable_warns(fake_http, token_store, monkeypatch, capsys):
+    monkeypatch.setattr(api_mod, "login", lambda url, user, pwd, client: "tok-1")
+    monkeypatch.setattr(api_mod, "request", lambda *a, **k: {"full_name": "Jane Doe"})
+    monkeypatch.setattr("taigacli.credentials.save", lambda *a, **k: False)
+    monkeypatch.setattr("taigacli.credentials.forget", lambda *a, **k: False)
+    commands.cmd_login("http://x/api", "user", "pass", _ctx())
+    out = capsys.readouterr().out
+    assert "keyring unavailable" in out
+    assert "remembered via OS keyring" not in out
+
+
+def test_cmd_login_no_remember_saves_nothing(fake_http, token_store, monkeypatch, capsys):
+    monkeypatch.setattr(api_mod, "login", lambda url, user, pwd, client: "tok-1")
+    monkeypatch.setattr(api_mod, "request", lambda *a, **k: {"full_name": "Jane Doe"})
+    saved = []
+
+    def _guard(*a, **k):
+        saved.append(a)
+
+    monkeypatch.setattr("taigacli.credentials.save", _guard)
+    commands.cmd_login("http://x/api", "user", "pass", _ctx(), remember=False)
+    assert saved == []
+    assert "keyring unavailable" not in capsys.readouterr().out
+
+
+def test_cmd_login_json_reports_remembered(fake_http, token_store, monkeypatch, capsys):
+    monkeypatch.setattr(api_mod, "login", lambda url, user, pwd, client: "tok-1")
+    monkeypatch.setattr(api_mod, "request", lambda *a, **k: {"id": 7})
+    monkeypatch.setattr("taigacli.credentials.save", lambda *a, **k: True)
+    commands.cmd_login("http://x/api", "user", "pass", _ctx(json=True))
+    assert json.loads(capsys.readouterr().out) == {
+        "already_logged_in": False,
+        "user": {"id": 7},
+        "remembered": True,
+    }
+
+
+def test_cmd_logout_forgets_credential(fake_http, token_store, monkeypatch, capsys):
+    token_store.parent.mkdir(parents=True)
+    token_store.write_text("t")
+    monkeypatch.setenv("TAIGA_API_URL", "http://x/api")
+    calls = []
+    monkeypatch.setattr(
+        "taigacli.credentials.forget", lambda url: calls.append(url) or True
+    )
+    commands.cmd_logout(_ctx())
+    assert calls == ["http://x/api"]
+    out = capsys.readouterr().out
+    assert "removed" in out and "remembered" in out
+
+
+def test_cmd_logout_without_credential_stays_quiet(fake_http, token_store, monkeypatch, capsys):
+    token_store.parent.mkdir(parents=True)
+    token_store.write_text("t")
+    monkeypatch.setattr("taigacli.credentials.forget", lambda url: False)
+    commands.cmd_logout(_ctx())
+    assert "removed" in capsys.readouterr().out
+
+
+def test_cli_login_no_remember_flag(token_store, fake_http, monkeypatch):
+    token_store.parent.mkdir(parents=True)
+    token_store.write_text("")
+    monkeypatch.setenv("TAIGA_USERNAME", "user")
+
+    def _fail(*a, **k):
+        raise AssertionError("must not save credentials with --no-remember")
+
+    monkeypatch.setattr(api_mod, "login", lambda *a, **k: "tok-1")
+    monkeypatch.setattr(api_mod, "request", lambda *a, **k: {"id": 7})
+    monkeypatch.setattr("taigacli.credentials.save", _fail)
+    monkeypatch.setattr("taigacli.credentials.forget", lambda *a, **k: False)
+    result = CliRunner().invoke(
+        cli.taiga, ["login", "-u", "user", "--password", "pw", "--no-remember"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "logged in" in result.output

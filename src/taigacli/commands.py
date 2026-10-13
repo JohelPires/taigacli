@@ -4,6 +4,7 @@ import json
 import sys
 import textwrap
 
+from taigacli import credentials
 from taigacli.errors import CliError
 from taigacli.render import (
     eyebrow,
@@ -291,7 +292,7 @@ def cmd_get_md(api, ctx, resource: str, item_id: int, md_path: str, force: bool)
     print(paint(g("dot"), "ready") + " " + paint(f"saved {written}", "muted"), file=sys.stderr)
 
 
-def cmd_login(api_url: str, username: str | None, password: str | None, ctx):
+def cmd_login(api_url: str, username: str | None, password: str | None, ctx, remember: bool = True):
     import click
     import httpx
 
@@ -307,15 +308,24 @@ def cmd_login(api_url: str, username: str | None, password: str | None, ctx):
     if password is None:
         password = click.prompt("Password", hide_input=True)
     token = api_mod.login(api_url, username, password, client)
+    remembered = remember and credentials.save(api_url, username, password)
     me = _me(api_mod, client, token, api_url)
     user = me if isinstance(me, dict) else {}
     if is_json(ctx):
-        print(json.dumps({"already_logged_in": False, "user": user}))
+        print(json.dumps({"already_logged_in": False, "user": user, "remembered": remembered}))
         return
     name = user.get("full_name") or user.get("username") or username
     print()
     print(GUTTER + paint(g("dot"), "ready") + " " + paint(str(name), "ink", bold=True))
-    print(GUTTER + paint("logged in - token saved", "muted"))
+    if remembered:
+        print(GUTTER + paint("logged in - token saved - remembered via OS keyring", "muted"))
+    else:
+        print(GUTTER + paint("logged in - token saved", "muted"))
+        if remember:
+            print(GUTTER + paint(
+                "keyring unavailable; you will be asked to log in again when the token expires",
+                "muted",
+            ))
     print()
 
 
@@ -351,20 +361,27 @@ def _print_session(api_mod, client, api_url: str, username: str | None, ctx) -> 
 
 
 def cmd_logout(ctx):
+    from taigacli import api as api_mod
     from taigacli.api import clear_token
-    from taigacli.config import token_file
+    from taigacli.config import api_url, token_file
 
     path = token_file()
+    remembered_removed = credentials.forget(api_url())
     if clear_token():
         if is_json(ctx):
-            print(json.dumps({"logged_out": True, "token_file": str(path)}))
+            print(json.dumps({"logged_out": True, "token_file": str(path), "remembered_removed": remembered_removed}))
             return
         print(GUTTER + paint(f"removed {path}", "muted"))
+        if remembered_removed:
+            print(GUTTER + paint("forgot the remembered login", "muted"))
     else:
         if is_json(ctx):
-            print(json.dumps({"logged_out": False, "token_file": str(path)}))
+            print(json.dumps({"logged_out": False, "token_file": str(path), "remembered_removed": remembered_removed}))
             return
-        print(GUTTER + paint("not logged in", "muted"))
+        if remembered_removed:
+            print(GUTTER + paint("forgot the remembered login", "muted"))
+        else:
+            print(GUTTER + paint("not logged in", "muted"))
 
 
 def new_status_name(status: dict) -> str:

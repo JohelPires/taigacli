@@ -28,7 +28,7 @@ A terminal-first command-line client for [Taiga](https://taiga.io) boards.
 
    `--editable` keeps the install live: after `git pull` the new code runs with no reinstall. Re-run the install only if `pyproject.toml` dependencies change. Uninstall with `uv tool uninstall taigacli`.
 
-`taiga login` exchanges your password (typed once, hidden) for an auth token cached in `~/.config/taigacli/.token` (honors `XDG_CONFIG_HOME`); every other command uses that token and no password is stored anywhere. Running `login` while signed in just reports the current user — run `taiga logout` first to sign in as another user. `taiga logout` deletes the cached token. When the token is missing or expires, commands fail with "run `taiga login`" — just log in again.
+`taiga login` exchanges your password (typed once, hidden) for an auth token cached in `~/.config/taigacli/.token` (honors `XDG_CONFIG_HOME`). The password itself is stored in the OS keyring under the service `taigacli`, keyed by API URL — that's what makes "log in once": when a token expires the CLI re-authenticates with the remembered password and carries on silently. With `--no-remember`, or when no keyring backend is available (headless server, locked keyring), no password is stored: login prints a warning, and an expired token falls back to the familiar "run `taiga login`". Keeping the password in the keyring is equivalent to a browser's saved passwords — anyone with access to your unlocked desktop session could retrieve it. Running `login` while signed in just reports the current user — run `taiga logout` first to sign in as another user; `taiga logout` deletes the cached token and the remembered password.
 
 ## Usage
 
@@ -54,8 +54,8 @@ taiga issue 12 --json                      # raw JSON payload
 | Command | Description |
 | --- | --- |
 | `mine` | User stories, tasks and issues assigned to you |
-| `login` | Sign in once; saves the auth token (password is never stored) |
-| `logout` | Delete the cached auth token |
+| `login` | Sign in once; the token is cached and the password kept in the OS keyring so tokens renew silently (`--no-remember` opts out) |
+| `logout` | Delete the cached auth token and the remembered keyring credential |
 | `<resource> [ref]` | List a resource, or show one item: `stories` (`story`, `userstories`, `userstory`), `tasks` (`task`), `issues` (`issue`), `epics` (`epic`), `milestones` (`milestone`), `members` (`memberships`, `membership`), `wiki`, `timeline` |
 | `set <ref> --<status>` | Change a status (e.g. `set 1344 --in-review`); bare `set <ref>` shows the options |
 | `whoami` | Current user |
@@ -68,7 +68,7 @@ taiga issue 12 --json                      # raw JSON payload
 
 - `--json` — raw JSON payload on stdout
 - `--plain` — no color, ASCII only
-- `login`: `-u/--username`, `--password` — skip the prompts; the password stays hidden when prompted
+- `login`: `-u/--username`, `--password` — skip the prompts; the password stays hidden when prompted; `--remember/--no-remember` (default: remember) — whether the password is stored in the OS keyring for silent token renewal
 - `<resource>`: `--limit N` — cap listing results; `--filter k=v` — repeatable (keys: `project`, `status`, `milestone`, `assigned_to`, `page_size`)
 - `set`: `--dry-run` — preview the change; `--status "In Review"` — target a status by name, slug or id instead of a flag
 - `<resource> <ref>`: `--md DIR` — write the full ticket as markdown into DIR, named from the ticket title; `--force` — overwrite an existing file without asking

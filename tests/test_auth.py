@@ -32,6 +32,7 @@ class StubResponse:
         self.status_code = status_code
         self._payload = payload or {}
         self.text = text
+        self.headers = {}
 
     def json(self):
         return self._payload
@@ -222,3 +223,83 @@ def test_cli_logout_smoke(token_store):
     result = CliRunner().invoke(cli.taiga, ["logout"])
     assert result.exit_code == 0
     assert not token_store.exists()
+
+
+class RenewClient:
+    """401 on the first `expire_times` requests, then 200; /auth yields 'fresh'."""
+
+    def __init__(self, expire_times=1):
+        self.requests = 0
+        self.expire_times = expire_times
+        self.auth_calls = 0
+
+    def request(self, method, url, json=None, headers=None, timeout=None):
+        self.requests += 1
+        return (
+            StubResponse(401)
+            if self.requests <= self.expire_times
+            else StubResponse(200, {"id": 1}, text='{"id": 1}')
+        )
+
+    def post(self, url, json=None):
+        self.auth_calls += 1
+        return StubResponse(200, {"auth_token": "fresh"})
+
+
+def test_request_401_renews_and_retries_once(token_store, monkeypatch):
+    token_store.parent.mkdir(parents=True)
+    token_store.write_text("stale")
+    monkeypatch.setattr(api_mod.credentials, "load", lambda url: ("user", "pass"))
+    client = RenewClient()
+    resp = api_mod.request({"api_url": "http://x"}, client, "stale", "GET", "users/me")
+    assert resp == {"id": 1}
+    assert token_store.read_text() == "fresh"       # token file rewritten silently
+    assert (token_store.stat().st_mode & 0o777) == 0o600
+
+
+def test_request_401_no_credential_keeps_current_behavior(token_store, monkeypatch):
+    token_store.parent.mkdir(parents=True)
+    token_store.write_text("stale")
+    monkeypatch.setattr(api_mod.credentials, "load", lambda url: None)
+    client = StubClient({"request": StubResponse(401)})
+    with pytest.raises(CliError) as exc:
+        api_mod.request({"api_url": "http://x"}, client, "stale", "GET", "users/me")
+    assert "taiga login" in str(exc.value)
+    assert not token_store.exists()                  # stale token still cleared
+
+
+def test_request_401_renew_auth_failure_falls_back(token_store, monkeypatch):
+    token_store.parent.mkdir(parents=True)
+    token_store.write_text("stale")
+    monkeypatch.setattr(api_mod.credentials, "load", lambda url: ("user", "pass"))
+    client = StubClient({"request": StubResponse(401), "post": StubResponse(400, text="bad")})
+    with pytest.raises(CliError) as exc:
+        api_mod.request({"api_url": "http://x"}, client, "stale", "GET", "users/me")
+    assert "taiga login" in str(exc.value)
+
+
+def test_request_renewal_never_loops(token_store, monkeypatch):
+    token_store.parent.mkdir(parents=True)
+    token_store.write_text("stale")
+    monkeypatch.setattr(api_mod.credentials, "load", lambda url: ("user", "pass"))
+    client = RenewClient(expire_times=99)            # even a fresh token 401s
+    with pytest.raises(CliError) as exc:
+        api_mod.request({"api_url": "http://x"}, client, "stale", "GET", "users/me")
+    assert "taiga login" in str(exc.value)
+    assert client.auth_calls == 1                    # exactly one re-auth attempt
+
+
+def test_api_call_picks_up_renewed_token(token_store, monkeypatch):
+    token_store.parent.mkdir(parents=True)
+    token_store.write_text("stale")
+    monkeypatch.setenv("TAIGA_PROJECT_SLUG", "proj")
+
+    def renewing_request(cfg, client, token, method, path, *a, **k):
+        token_store.write_text("fresh")              # simulate the internal renewal
+        return {"ok": True}
+
+    monkeypatch.setattr(api_mod, "request", renewing_request)
+    api = api_mod.Api()
+    assert api.token == "stale"
+    api.call("GET", "users/me")
+    assert api.token == "fresh"  # self.token synced from the file

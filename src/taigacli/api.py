@@ -5,6 +5,7 @@ import urllib.parse
 
 import httpx
 
+from taigacli import credentials
 from taigacli.config import config, secure, token_file
 from taigacli.errors import CliError
 from taigacli.resources import HISTORY_KINDS, STATUS_KINDS
@@ -29,7 +30,7 @@ def get_token(cfg: dict, client: httpx.Client) -> str:
     raise CliError(NOT_LOGGED_IN)
 
 
-def login(api_url: str, username: str, password: str, client: httpx.Client) -> str:
+def _auth(api_url: str, username: str, password: str, client: httpx.Client) -> str:
     payload = {"type": "normal", "username": username, "password": password}
     try:
         response = client.post(f"{api_url}/auth", json=payload)
@@ -40,10 +41,35 @@ def login(api_url: str, username: str, password: str, client: httpx.Client) -> s
     token = response.json().get("auth_token")
     if not token:
         raise CliError("Login succeeded but no auth_token returned")
+    return token
+
+
+def _cache_token(token: str) -> None:
     tf = token_file()
     tf.parent.mkdir(parents=True, exist_ok=True)
     tf.write_text(token)
     secure(tf)
+
+
+def login(api_url: str, username: str, password: str, client: httpx.Client) -> str:
+    """Authenticate and cache the token. Saving credentials is cmd_login's job."""
+    token = _auth(api_url, username, password, client)
+    _cache_token(token)
+    return token
+
+
+def _renew(cfg: dict, client: httpx.Client) -> str | None:
+    """Silent renewal: re-auth with the remembered keyring credential."""
+    api_url_val = cfg.get("api_url", "")
+    cred = credentials.load(api_url_val)
+    if cred is None:
+        return None
+    username, password = cred
+    try:
+        token = _auth(api_url_val, username, password, client)
+    except CliError:
+        return None
+    _cache_token(token)
     return token
 
 
@@ -64,6 +90,7 @@ def request(
     params: dict | None = None,
     body: dict | None = None,
     soft: bool = False,
+    _retried: bool = False,
 ):
     url = path if path.startswith("http") else f"{cfg['api_url']}/{path.lstrip('/')}"
     if params:
@@ -76,6 +103,10 @@ def request(
     if response.status_code == 404 and soft:
         return None
     if response.status_code == 401:
+        # remembered credential: re-auth silently and retry once (browser-like)
+        fresh = _renew(cfg, client) if not _retried else None
+        if fresh:
+            return request(cfg, client, fresh, method, path, params, body, soft, _retried=True)
         clear_token()
         raise CliError("Session expired - run `taiga login`")
     if response.status_code >= 400:
@@ -99,7 +130,11 @@ class Api:
         self.token = get_token(self.cfg, self.client)
 
     def call(self, method: str, path: str, params: dict | None = None, body: dict | None = None, soft: bool = False):
-        return request(self.cfg, self.client, self.token, method, path, params, body, soft)
+        result = request(self.cfg, self.client, self.token, method, path, params, body, soft)
+        fresh = load_token()
+        if fresh and fresh != self.token:
+            self.token = fresh
+        return result
 
     def get(self, path: str, params: dict | None = None, soft: bool = False):
         return self.call("GET", path, params=params, soft=soft)

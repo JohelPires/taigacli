@@ -16,13 +16,15 @@ A terminal-first command-line client for [Taiga](https://taiga.io) boards.
    TAIGA_PROJECT_SLUG=your-project-slug
    ```
 
-   Values are merged per key with precedence: environment variables > nearest `.env` walking up from the current directory > `~/.config/taigacli/.env` (the global fallback for system-wide installs). No `.env` is required if all keys come from variables. `TAIGA_USERNAME` is optional — it becomes the default at the login prompt.
+   Values are merged per key with precedence: environment variables > nearest `.env` walking up from the current directory > `~/.config/taigacli/.env` (the global fallback for system-wide installs). No `.env` is required if all keys come from variables. `TAIGA_PROJECT_SLUG` is only the initial default — once you run `taiga project <slug|id>` the switched project is stored globally and wins over it. You can also skip the slug entirely: list your projects and switch. `TAIGA_USERNAME` is optional — it becomes the default at the login prompt.
 
 2. Install and log in:
 
    ```sh
    uv tool install --editable .    # or: pipx install -e ., or pip install -e '.[dev]' for dev
    taiga login                     # prompts for username + password (or use -u/--password)
+   taiga projects                  # list the projects you are a member of
+   taiga project <slug|id>         # switch to one of them
    taiga whoami
    ```
 
@@ -39,6 +41,8 @@ taiga <command> [options]
 ```sh
 taiga mine                                 # open user stories / tasks / issues assigned to you
 taiga mine --md ./mine                     # export all of them as markdown files
+taiga projects                             # list the projects you are a member of
+taiga project acme-web                     # switch the active project (global, persistent)
 taiga tasks                                # list tasks
 taiga task 1343                            # show one task by ref
 taiga story 1343 --md ./stories            # export a ticket as markdown into a folder (filename derived from the title)
@@ -60,7 +64,8 @@ taiga issue 12 --json                      # raw JSON payload
 | `<resource> [ref]` | List a resource, or show one item: `stories` (`story`, `userstories`, `userstory`), `tasks` (`task`), `issues` (`issue`), `epics` (`epic`), `milestones` (`milestone`), `members` (`memberships`, `membership`), `wiki`, `timeline` |
 | `set <ref> --<status>` | Change a status (e.g. `set 1344 --in-review`); bare `set <ref>` shows the options |
 | `whoami` | Current user |
-| `project` | Resolved project by slug |
+| `project` | Show the current project, or switch: `taiga project <slug>` (or the project id) |
+| `projects` | Projects you are a member of; the current one is marked |
 | `help` | Command overview |
 
 `stories`/`tasks`/`issues`/`epics` and their singular aliases resolve by ref. `milestones`, `members` and `wiki` take an item id; `timeline` lists only (it has no per-item lookup). `--filter`/`--limit` are accepted everywhere but ignored when a ref/id is given. Resource commands are exact words — no abbreviations.
@@ -101,6 +106,18 @@ taiga issue 12 --md ~/notes -f             # -f == --force
 ```sh
 taiga mine --md ./mine                     # ./mine/story-1343-<slug>.md, task-…, issue-…
 ```
+
+## Projects and switching
+
+```sh
+taiga projects                 # list your projects; a dot marks the current one
+taiga project                  # show the current project and where it was resolved from
+taiga project acme-web         # switch to a project by slug
+taiga project 42               # ... or by id
+taiga project acme-web --json  # raw JSON payload of the switch
+```
+
+Switching is global and persistent: `taiga project <slug|id>` stores the choice in `~/.config/taigacli/current_project.json` (honors `XDG_CONFIG_HOME`) and from then on every command uses it, outranking `TAIGA_PROJECT_SLUG` in your shell or `.env` files. `taiga logout` does not undo it. A stored switch only applies to the Taiga instance it was made against (its `TAIGA_API_URL`); pointing the CLI at another instance falls back to your configured slug there. `projects`, `project` and `whoami` work before any project is selected; ticket commands ask you to run `taiga projects`, then `taiga project <slug|id>`.
 
 ## Output styling
 

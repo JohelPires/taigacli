@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import textwrap
 
 from taigacli import credentials
+from taigacli.config import load_current_project, save_current_project
 from taigacli.errors import CliError
 from taigacli.render import (
     eyebrow,
     header_line,
     render_change,
+    render_projects,
     render_record,
     render_rows,
     render_status_menu,
@@ -129,22 +132,82 @@ def cmd_whoami(api, ctx):
         print(json.dumps(user, indent=2))
         return
     full_name = user.get("full_name", user.get("username", "?"))
+    proj = api.cfg.get("slug") or "none - run `taiga projects`"
     line = paint(g("dot"), "ready") + " " + paint(str(full_name), "ink", bold=True)
-    line += paint(f"  ·  id {user.get('id')}  ·  project {api.cfg['slug']}", "muted")
+    line += paint(f"  ·  id {user.get('id')}  ·  project {proj}", "muted")
     print()
     print(line)
     print()
 
 
-def cmd_project(api, ctx):
-    proj = api.get("projects/by_slug", params={"slug": api.cfg["slug"]})
+def cmd_projects(api, ctx, limit: int | None = None):
+    me = api.get("users/me")
+    uid = me.get("id") if isinstance(me, dict) else None
+    if not uid:
+        raise CliError("Could not resolve current user id")
+    data = api.get(
+        "projects",
+        params={"member": uid, "order_by": "memberships__user_order"},
+    )
+    if isinstance(data, dict):
+        data = [data]
+    if isinstance(data, list) and limit:
+        data = data[:limit]
+    if is_json(ctx):
+        print(json.dumps(data, indent=2))
+        return
+    print(header_line("projects", f"{len(data) if isinstance(data, list) else 0} shown"))
+    print()
+    print(render_projects(data if isinstance(data, list) else [], api.cfg.get("slug")))
+    print()
+
+
+def _slug_source(slug: str | None) -> str:
+    if not slug:
+        return "none"
+    stored = load_current_project()
+    if stored and stored.get("slug") == slug:
+        return "switched"
+    if os.environ.get("TAIGA_PROJECT_SLUG") == slug:
+        return "env"
+    return ".env"
+
+
+def cmd_project(api, ctx, target: str | None = None):
+    target = str(target).strip() if target else ""
+    if not target:
+        slug = api.cfg.get("slug")
+        if not slug:
+            if is_json(ctx):
+                print(json.dumps(None))
+                return
+            print()
+            print(GUTTER + paint("no project selected - run `taiga projects`, then `taiga project <slug|id>`", "muted"))
+            print()
+            return
+        proj = api.get("projects/by_slug", params={"slug": slug})
+        if is_json(ctx):
+            print(json.dumps(proj, indent=2))
+            return
+        line = paint(g("dot"), "ready") + " " + paint(str(proj.get("name", proj.get("slug", "?"))), "ink", bold=True)
+        line += paint(f"  ·  id {proj.get('id')}  ·  slug {proj.get('slug')}  ·  {squeeze(_slug_source(slug), 10)}", "muted")
+        print()
+        print(line)
+        print()
+        return
+    if target.isdigit():
+        proj = api.get(f"projects/{int(target)}", soft=True)
+    else:
+        proj = api.get("projects/by_slug", params={"slug": target}, soft=True)
+    if not isinstance(proj, dict) or not proj.get("id"):
+        raise CliError(f"Project not found: {target} - run `taiga projects`")
+    path = save_current_project(proj, api_url_val=api.cfg.get("api_url"))
     if is_json(ctx):
         print(json.dumps(proj, indent=2))
         return
-    line = paint(g("dot"), "ready") + " " + paint(str(proj.get("name", proj.get("slug", "?"))), "ink", bold=True)
-    line += paint(f"  ·  id {proj.get('id')}  ·  slug {proj.get('slug')}", "muted")
     print()
-    print(line)
+    print(GUTTER + paint(g("dot"), "ready") + " " + paint(str(proj.get("name") or proj.get("slug")), "ink", bold=True))
+    print(GUTTER + paint(f"now using  ·  id {proj.get('id')}  ·  slug {proj.get('slug')}  ·  saved {path}", "muted"))
     print()
 
 

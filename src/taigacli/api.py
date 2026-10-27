@@ -124,8 +124,8 @@ def request(
 class Api:
     """Small stateful wrapper bundling config, token and an httpx client."""
 
-    def __init__(self) -> None:
-        self.cfg = config()
+    def __init__(self, require_project: bool = True) -> None:
+        self.cfg = config(require_slug=require_project)
         self.client = httpx.Client(base_url=self.cfg["api_url"], follow_redirects=False)
         self.token = get_token(self.cfg, self.client)
 
@@ -162,6 +162,8 @@ class Api:
     _PROJECT_CACHE: dict[tuple, dict] = {}
 
     def project(self) -> dict:
+        if not self.cfg.get("slug"):
+            raise CliError("No project selected - run `taiga projects`, then `taiga project <slug|id>`")
         cache_key = (self.cfg["api_url"], self.cfg["slug"], self.token)
         if cache_key in Api._PROJECT_CACHE:
             return Api._PROJECT_CACHE[cache_key]

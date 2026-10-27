@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import stat
 from pathlib import Path
@@ -12,6 +13,39 @@ DEFAULT_API_URL = "https://api.taiga.io/api/v1"
 def config_dir() -> Path:
     base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
     return Path(base) / "taigacli"
+
+
+def current_project_file() -> Path:
+    return config_dir() / "current_project.json"
+
+
+def load_current_project() -> dict | None:
+    """Stored switch, or None when absent/corrupt."""
+    path = current_project_file()
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or not data.get("slug"):
+        return None
+    return data
+
+
+def save_current_project(project: dict, api_url_val: str | None = None) -> Path:
+    """Persist the switched project atomically; returns the file path."""
+    path = current_project_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    record = {
+        "api_url": api_url_val if api_url_val is not None else api_url(),
+        "id": project.get("id"),
+        "slug": project.get("slug"),
+        "name": project.get("name") or project.get("slug"),
+    }
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(record, indent=2) + "\n")
+    os.replace(tmp, path)
+    secure(path)
+    return path
 
 
 def env_file() -> Path:
@@ -74,19 +108,32 @@ def api_url() -> str:
     return (env.get("TAIGA_API_URL") or cfg.get("TAIGA_API_URL", DEFAULT_API_URL)).rstrip("/")
 
 
-def config() -> dict:
+def config(require_slug: bool = True) -> dict:
+    """Resolve api_url/username/slug.
+
+    Slug precedence: stored `taiga project` switch > TAIGA_PROJECT_SLUG env
+    var > .env files. The stored switch is honored only when its api_url
+    matches the resolved one, so pointing TAIGA_API_URL elsewhere falls back
+    to per-instance config instead of a stale cross-instance slug.
+    """
     env = os.environ
     cfg = load_env()
+    resolved_url = api_url()
     out = {
-        "api_url": api_url(),
+        "api_url": resolved_url,
         "username": env.get("TAIGA_USERNAME") or cfg.get("TAIGA_USERNAME"),
-        "slug": env.get("TAIGA_PROJECT_SLUG") or cfg.get("TAIGA_PROJECT_SLUG"),
+        "slug": None,
     }
-    missing = [k for k in ("slug",) if not out[k] or "your_taiga" in out[k]]
-    if missing:
+    stored = load_current_project()
+    if stored and stored.get("slug") and stored.get("api_url") in (None, resolved_url):
+        out["slug"] = str(stored.get("slug"))
+    env_slug = env.get("TAIGA_PROJECT_SLUG") or cfg.get("TAIGA_PROJECT_SLUG")
+    if not out["slug"] and env_slug and "your_taiga" not in env_slug:
+        out["slug"] = env_slug
+    if require_slug and not out["slug"]:
         raise CliError(
-            f"Missing config keys: {', '.join(missing)} - set TAIGA_* environment"
-            f" variables or edit {env_file()}"
+            f"Missing config keys: slug - set TAIGA_PROJECT_SLUG, run `taiga projects`"
+            f" and `taiga project <slug|id>`, or edit {env_file()}"
         )
     return out
 

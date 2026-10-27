@@ -6,7 +6,15 @@ from pathlib import Path
 import pytest
 
 from taigacli import config as config_mod
-from taigacli.config import api_url, config, env_files, parse_env_file
+from taigacli.config import (
+    api_url,
+    config,
+    current_project_file,
+    env_files,
+    load_current_project,
+    parse_env_file,
+    save_current_project,
+)
 from taigacli.errors import CliError
 
 
@@ -117,3 +125,52 @@ def test_api_url_from_env_file(cwd: Path, config_home, monkeypatch):
     monkeypatch.delenv("TAIGA_API_URL", raising=False)
     (config_home / ".env").write_text("TAIGA_API_URL=http://filehost/api/v1\n")
     assert api_url() == "http://filehost/api/v1"
+
+
+# --- current project switch ------------------------------------------------
+
+
+def test_stored_project_beats_env(cwd: Path, config_home, no_taiga_env, monkeypatch):
+    monkeypatch.setenv("TAIGA_PROJECT_SLUG", "env-slug")
+    save_current_project({"id": 1, "slug": "stored-slug", "name": "Stored"})
+    assert config()["slug"] == "stored-slug"
+
+
+def test_env_only_when_no_switch_was_made(cwd: Path, config_home, no_taiga_env, monkeypatch):
+    monkeypatch.setenv("TAIGA_PROJECT_SLUG", "env-slug")
+    assert config()["slug"] == "env-slug"
+
+
+def test_stored_project_api_url_mismatch_falls_back(cwd: Path, config_home, no_taiga_env, monkeypatch):
+    monkeypatch.setenv("TAIGA_PROJECT_SLUG", "env-slug")
+    save_current_project(
+        {"id": 1, "slug": "stored-slug", "name": "Stored"},
+        api_url_val="http://other/api/v1",
+    )
+    assert config()["slug"] == "env-slug"
+
+
+def test_stored_project_load_roundtrip_and_perms(cwd: Path, config_home, no_taiga_env, monkeypatch):
+    save_current_project({"id": 7, "slug": "main-project", "name": "Main Project"})
+    path = current_project_file()
+    record = load_current_project()
+    assert record["slug"] == "main-project"
+    assert record["id"] == 7
+    assert record["name"] == "Main Project"
+    assert record["api_url"] == "https://api.taiga.io/api/v1"
+    assert (path.stat().st_mode & 0o777) == 0o600
+
+
+def test_corrupt_current_project_file_ignored(cwd: Path, config_home, no_taiga_env, monkeypatch):
+    current_project_file().write_text("{oops")
+    monkeypatch.setenv("TAIGA_PROJECT_SLUG", "env-slug")
+    assert load_current_project() is None
+    assert config()["slug"] == "env-slug"
+
+
+def test_config_without_slug_only_strict_when_required(cwd: Path, config_home, no_taiga_env):
+    assert config(require_slug=False)["slug"] is None
+    with pytest.raises(CliError) as exc:
+        config()
+    assert "Missing config keys: slug" in str(exc.value)
+    assert "taiga projects" in str(exc.value)

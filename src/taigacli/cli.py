@@ -112,16 +112,27 @@ def logout_cmd(ctx, cmd_json, cmd_plain):
 @click.pass_context
 def whoami(ctx, cmd_json, cmd_plain):
     _ui(ctx)
-    commands.cmd_whoami(_api(), ctx)
+    commands.cmd_whoami(Api(require_project=False), ctx)
 
 
-@taiga.command(name="project", help="the resolved project")
+@taiga.command(name="projects", help="projects you are a member of")
+@click.option("--limit", type=int, default=None, help="cap the number of results")
 @click.option("--json", "cmd_json", is_flag=True, help="raw JSON output")
 @click.option("--plain", "cmd_plain", is_flag=True, help="no color, ASCII only")
 @click.pass_context
-def project(ctx, cmd_json, cmd_plain):
+def projects(ctx, limit, cmd_json, cmd_plain):
     _ui(ctx)
-    commands.cmd_project(_api(), ctx)
+    commands.cmd_projects(Api(require_project=False), ctx, limit)
+
+
+@taiga.command(name="project", help="show the current project, or switch: project <slug|id>")
+@click.argument("target", required=False, metavar="[SLUG|ID]")
+@click.option("--json", "cmd_json", is_flag=True, help="raw JSON output")
+@click.option("--plain", "cmd_plain", is_flag=True, help="no color, ASCII only")
+@click.pass_context
+def project(ctx, target, cmd_json, cmd_plain):
+    _ui(ctx)
+    commands.cmd_project(Api(require_project=False), ctx, target)
 
 
 @taiga.command(name="help", help="show available commands and usage")

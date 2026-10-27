@@ -126,6 +126,26 @@ def render_members(items: list) -> str:
     return "\n".join(lines)
 
 
+def render_projects(items: list, current_slug: str | None) -> str:
+    if not items:
+        return GUTTER + paint(f"{g('slice')} no projects {g('slice')}", "muted")
+    names = [str(i.get("name") or i.get("slug") or "?") for i in items]
+    slugs = [str(i.get("slug") or "") for i in items]
+    name_w = max([12] + [len(n) for n in names])
+    slug_w = max([10] + [len(s) for s in slugs])
+    id_w = max([6] + [len(f"id {i.get('id')}") for i in items])
+    lines = []
+    for item, raw_name, raw_slug in zip(items, names, slugs):
+        current = bool(current_slug) and raw_slug == current_slug
+        marker = paint(g("dot"), "ready") + " " if current else "  "
+        name_raw = squeeze(raw_name, name_w)
+        line = GUTTER + marker + paint(pad_right(name_raw, name_w), "ink", bold=current)
+        line += "  " + paint(pad_right(raw_slug, slug_w), "muted")
+        line += "  " + paint(pad_left(f"id {item.get('id')}", id_w), "muted")
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def show_summary(data, resource: str) -> None:
     if isinstance(data, dict):
         data = [data]

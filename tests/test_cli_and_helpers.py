@@ -106,6 +106,25 @@ def test_help_alias_flags_accepted():
     assert "--plain" not in result.output or result.exit_code == 0
 
 
+def test_api_post_uses_call():
+    from taigacli.api import Api
+
+    api = object.__new__(Api)
+    captured = {}
+
+    def fake_call(method, path, params=None, body=None, soft=False):
+        captured.update(method=method, path=path, body=body)
+        return {"id": 99}
+
+    api.call = fake_call
+    assert api.post("userstories", {"subject": "S"}) == {"id": 99}
+    assert captured == {
+        "method": "POST",
+        "path": "userstories",
+        "body": {"subject": "S"},
+    }
+
+
 class FakeApi:
     story_only: bool = True
 

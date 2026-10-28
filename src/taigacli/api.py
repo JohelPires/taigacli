@@ -142,6 +142,9 @@ class Api:
     def patch(self, path: str, body: dict):
         return self.call("PATCH", path, body=body)
 
+    def post(self, path: str, body: dict):
+        return self.call("POST", path, body=body)
+
     def by_ref(self, path: str, ref: int, soft: bool = False) -> dict:
         item = self.get(f"{path}/by_ref", params={"ref": ref, "project": self.project_id()}, soft=soft)
         if item is None and soft:

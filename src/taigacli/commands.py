@@ -76,6 +76,51 @@ def cmd_get(api, ctx, resource: str, item_id: int):
         print(json.dumps(data, indent=2))
 
 
+def cmd_new(
+    api,
+    ctx,
+    resource: str,
+    subject: str,
+    description: str | None = None,
+    status_opt: str | None = None,
+    story_ref: int | None = None,
+):
+    canonical = SET_ALIASES.get(str(resource).strip().lower())
+    if canonical is None:
+        raise CliError(
+            "Can only create stories, tasks, or issues - expected story, task, or issue"
+        )
+    subject = str(subject).strip()
+    if not subject:
+        raise CliError("Subject cannot be empty")
+    if story_ref is not None and canonical != "tasks":
+        raise CliError("--story only applies to tasks")
+
+    body: dict = {"project": api.project_id(), "subject": subject}
+    if description is not None:
+        body["description"] = description
+    if status_opt:
+        options = api.load_statuses(body["project"], canonical)
+        matched = _match_status(options, None, status_opt)
+        if matched is None:
+            names = ", ".join(o.get("name", "?") for o in options)
+            raise CliError(f"No status matches '{status_opt}' - choose from: {names}")
+        body["status"] = matched["id"]
+    if canonical == "tasks" and story_ref is not None:
+        story = api.by_ref("userstories", story_ref, soft=True)
+        if not isinstance(story, dict) or not story.get("id"):
+            raise CliError(f"Story not found: #{story_ref}")
+        body["user_story"] = story["id"]
+
+    item = api.post(RESOURCES[canonical], body)
+    if is_json(ctx):
+        print(json.dumps(item, indent=2))
+        return
+    if not isinstance(item, dict):
+        raise CliError("Could not create ticket: empty response")
+    print(render_record(item, LABELS.get(canonical, canonical)))
+
+
 def cmd_mine(api, ctx, limit: int | None, md_path: str | None = None):
     proj = api.project()
     me = api.get("users/me")

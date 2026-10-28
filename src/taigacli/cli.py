@@ -187,6 +187,20 @@ for _name in RESOURCE_SPECS:
     taiga.add_command(_make_resource_command(_name))
 
 
+@taiga.command(name="new", help="create a user story, task, or issue")
+@click.argument("resource", metavar="RESOURCE")
+@click.argument("subject", metavar="SUBJECT")
+@click.option("--description", "-d", default=None, help="Markdown description")
+@click.option("--status", default=None, help="initial status by name, slug, or id")
+@click.option("--story", "story_ref", type=int, default=None, metavar="REF", help="parent user story ref (tasks only)")
+@click.option("--json", "cmd_json", is_flag=True, help="raw JSON output")
+@click.option("--plain", "cmd_plain", is_flag=True, help="no color, ASCII only")
+@click.pass_context
+def new_cmd(ctx, resource, subject, description, status, story_ref, cmd_json, cmd_plain):
+    _ui(ctx)
+    commands.cmd_new(_api(), ctx, resource, subject, description, status, story_ref)
+
+
 @taiga.command(
     name="set",
     context_settings={"allow_extra_args": True, "ignore_unknown_options": True},

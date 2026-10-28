@@ -97,7 +97,7 @@ def test_cli_help_lists_commands():
     result = CliRunner().invoke(cli.taiga, ["--help"])
     assert result.exit_code == 0
     out = result.output
-    for name in ("mine", "stories", "tasks", "issues", "epics", "milestones", "wiki", "timeline", "set", "whoami", "project", "projects", "login", "logout", "help"):
+    for name in ("mine", "new", "stories", "tasks", "issues", "epics", "milestones", "wiki", "timeline", "set", "whoami", "project", "projects", "login", "logout", "help"):
         assert name in out
 
 

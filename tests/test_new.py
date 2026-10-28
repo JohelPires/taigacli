@@ -143,3 +143,51 @@ def test_new_json_prints_raw_payload(capsys):
     data = json.loads(capsys.readouterr().out)
     assert data["ref"] == 1343
     assert data["subject"] == "Subject"
+
+
+# --- cli wiring -------------------------------------------------------------
+
+
+def test_cli_new_invocation(monkeypatch):
+    import taigacli.cli as cli
+    from click.testing import CliRunner
+
+    api = NewApi()
+    monkeypatch.setattr(cli, "_api", lambda: api)
+    result = CliRunner().invoke(
+        cli.taiga, ["new", "story", "Fix login", "--description", "Body", "--json"]
+    )
+    assert result.exit_code == 0, result.output + (result.stderr or "")
+    assert json.loads(result.output)["ref"] == 1343
+    assert api.calls[0][1]["description"] == "Body"
+
+
+def test_cli_new_json_before_command(monkeypatch):
+    import taigacli.cli as cli
+    from click.testing import CliRunner
+
+    api = NewApi()
+    monkeypatch.setattr(cli, "_api", lambda: api)
+    result = CliRunner().invoke(cli.taiga, ["--json", "new", "issue", "Crash"])
+    assert result.exit_code == 0, result.output + (result.stderr or "")
+    assert json.loads(result.output)["ref"] == 1343
+
+
+def test_cli_new_task_story_option(monkeypatch):
+    import taigacli.cli as cli
+    from click.testing import CliRunner
+
+    api = NewApi()
+    monkeypatch.setattr(cli, "_api", lambda: api)
+    result = CliRunner().invoke(cli.taiga, ["new", "task", "Write tests", "--story", "3"])
+    assert result.exit_code == 0, result.output + (result.stderr or "")
+    assert api.calls[0][1]["user_story"] == 17
+
+
+def test_cli_new_listed_in_help():
+    import taigacli.cli as cli
+    from click.testing import CliRunner
+
+    result = CliRunner().invoke(cli.taiga, ["--help"])
+    assert result.exit_code == 0
+    assert "new" in result.output

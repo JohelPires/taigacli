@@ -50,15 +50,29 @@ taiga set 1344 --in-review                 # change a status
 taiga set 1344 --done --dry-run            # preview the change without saving
 taiga tasks --filter assigned_to=115       # filter listings (repeatable)
 taiga issue 12 --json                      # raw JSON payload
+taiga new story "Fix login"                # create a user story
+taiga new task "Write tests" --story 1343  # task under a story
+taiga new issue "Button misaligned" --status new
 ```
 
 `python -m taigacli` works the same as the `taiga` script.
+
+## Creating tickets
+
+```sh
+taiga new story "Fix login" --description "**Steps** to reproduce"
+taiga new task "Write tests" --story 1343
+taiga new issue "Button misaligned" --status in-progress
+```
+
+Resources accept the same aliases as the listing commands (`story`/`stories`/`userstory`/`userstories`, `task`/`tasks`, `issue`/`issues`). The subject is required. `--description` is Markdown and is sent verbatim — Taiga renders it to HTML, the same as the web editor. Without `--status`, Taiga picks the project's default status. Tasks may include a parent story with `--story REF`; without it, the task is created standalone. The created ticket is printed in the usual record layout; `--json` prints the raw API payload.
 
 ## Commands
 
 | Command | Description |
 | --- | --- |
 | `mine` | User stories, tasks and issues assigned to you; `--md DIR` exports them all as markdown |
+| `new <resource> "<subject>"` | Create a user story, task or issue in the current project |
 | `login` | Sign in once; the token is cached and the password kept in the OS keyring so tokens renew silently (`--no-remember` opts out) |
 | `logout` | Delete the cached auth token and the remembered keyring credential |
 | `<resource> [ref]` | List a resource, or show one item: `stories` (`story`, `userstories`, `userstory`), `tasks` (`task`), `issues` (`issue`), `epics` (`epic`), `milestones` (`milestone`), `members` (`memberships`, `membership`), `wiki`, `timeline` |
@@ -78,6 +92,7 @@ taiga issue 12 --json                      # raw JSON payload
 - `mine`: `--md DIR` — export every listed ticket as markdown into the folder DIR (existing files are overwritten)
 - `<resource>`: `--limit N` — cap listing results; `--filter k=v` — repeatable (keys: `project`, `status`, `milestone`, `assigned_to`, `page_size`)
 - `set`: `--dry-run` — preview the change; `--status "In Review"` — target a status by name, slug or id instead of a flag
+- `new`: `--description/-d TEXT` — Markdown body, sent verbatim; `--status NAME|SLUG|ID` — initial status (omitted: Taiga's default); `--story REF` — parent user story, tasks only
 - `<resource> <ref>`: `--md DIR` — write the full ticket as markdown into DIR, named from the ticket title; `--force` — overwrite an existing file without asking
 
 Re-setting the current status is a no-op. Refs are per-type: if a ref exists as more than one of user story / task / issue, `set` prints the candidates and asks for a resource prefix (e.g. `set story <ref>`).

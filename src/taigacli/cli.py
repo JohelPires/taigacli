@@ -49,8 +49,8 @@ class TaigaGroup(click.Group):
 def taiga(ctx, json, plain):
     """Terminal-first command-line client for Taiga boards.
 
-    Single file of mind, package underneath: list, inspect, set statuses,
-    and export tickets as markdown.
+    Single file of mind, package underneath: list, inspect, create, set
+    statuses, and export tickets as markdown.
     """
     ctx.ensure_object(dict)
     ctx.obj["group_json"] = bool(json)
